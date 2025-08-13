@@ -23,6 +23,10 @@ private slots:
     void closeTab(int index);
     bool saveFile(int index);
     int extractNumberFromUntitled(const QString &filename);
+    void openRecentFile();
+
+    void openFileNoPar();           // 无参数：弹出文件选择对话框
+    void openFile(const QString &path); // 有路径：直接打开
 
 protected:
     void closeEvent(QCloseEvent *event) override;  // ✅ 声明为 protected
@@ -36,6 +40,8 @@ private:
         QString filePath;     // 实际文件路径，恢复的未命名文件为空
         QString baseName;     // 显示名称，如 "未命名1" 或 "report.sql"
         bool isModified;
+        QString autoSavePath;
+        bool neverSavedByUser = true;
         // 获取显示名称（用于 tab 标签）
         QString displayName() const {
             return baseName.isEmpty() ? "未命名" : baseName;
@@ -54,4 +60,14 @@ private:
     QStringList getLastOpenFiles(); // 从设置中读取
     void setLastOpenFiles(const QStringList &files); // 写入设置
     bool closeTabWithPrompt(int index); // ✅ 返回 false 表示取消关闭
+
+    QMenu *m_recentFilesMenu;
+    void setupRecentFilesMenu();
+    void updateRecentFilesMenu();
+
+    void onSave();           // Ctrl+S
+    void onSaveAs();         // Ctrl+Shift+S
+    void onCloseTab();       // Ctrl+W
+    void onNewFile();        // Ctrl+N
+    void onOpenFile();       // Ctrl+O
 };

@@ -54,6 +54,25 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
     QMenu *beautifyMenu = menuBar->addMenu("美化");
     connect(newWindowAction, &QAction::triggered, this, &MainWindow::openNewWindow);
     connect(newTabAction, &QAction::triggered, this, &MainWindow::addNewTabMneu);
+
+    // 添加“打开”菜单项
+    QAction *openAction = fileMenu->addAction("打开...");
+    openAction->setShortcut(QKeySequence::Open);
+    connect(openAction, &QAction::triggered, this, &MainWindow::openFileNoPar);
+
+    // 添加“最近打开”菜单
+    setupRecentFilesMenu(); // 之前定义的函数
+
+    QAction *saveAct = new QAction(this);
+    saveAct->setShortcut(QKeySequence::Save);
+    connect(saveAct, &QAction::triggered, this, &MainWindow::onSave);
+    this->addAction(saveAct); // 添加到窗口，否则快捷键不生效
+
+    QAction *saveAsAct = new QAction(this);
+    saveAsAct->setShortcut(QKeySequence::SaveAs);
+    connect(saveAsAct, &QAction::triggered, this, &MainWindow::onSaveAs);
+    this->addAction(saveAsAct);
+
     restoreLastSession();
 }
 
@@ -98,7 +117,7 @@ void MainWindow::addNewTab(const QString &filePath)
     editor->setMarginLineNumbers(0, true);
     editor->setMarginsForegroundColor(QColor("#666666"));
     editor->setMarginsBackgroundColor(QColor("#eeeeee"));
-    editor->setWrapMode(QsciScintilla::WrapWord);
+    editor->setWrapMode(QsciScintilla::WrapCharacter);
 
     // 更新行号宽度
     updateLineNumberWidth(editor);
@@ -115,23 +134,18 @@ void MainWindow::addNewTab(const QString &filePath)
 
     if (!filePath.isEmpty()) {
         QFileInfo fi(filePath);
-
-        // 判断是否是自动保存文件（以 .autosave 结尾）
+        // 判断是否是 .autosave 恢复
         if (fi.fileName().endsWith(".autosave", Qt::CaseInsensitive)) {
-            // 是自动保存文件 → 去掉 .autosave 后缀作为显示名
-            baseName = fi.fileName().left(fi.fileName().length() - 9); // 去掉 ".autosave"
+            baseName = fi.fileName().left(fi.fileName().length() - 9);
             isAutoSaveRecovery = true;
-
-            // ❗ 关键：恢复后，filePath 应为空，表示“未保存”
-            finalFilePath = ""; // 不再指向 .autosave 文件
+            finalFilePath = ""; // 标记为未命名
         } else {
-            // 正常文件
             baseName = fi.fileName();
+            finalFilePath = filePath;
         }
     } else {
-        // 新建空白 tab
-        baseName = "未命名" + QString::number(m_untitledCount);
-        m_untitledCount++;
+        baseName = "未命名" + QString::number(m_untitledCount++);
+        finalFilePath = "";
     }
 
     // ------------------------
@@ -145,9 +159,10 @@ void MainWindow::addNewTab(const QString &filePath)
     // ------------------------
     TabInfo info;
     info.editor = editor;
-    info.filePath = finalFilePath;     // 可能为空（恢复场景）
+    info.filePath = finalFilePath;
     info.baseName = baseName;
-    info.isModified = false;
+    info.autoSavePath = autoSavePathForTab(info);
+    info.isModified = false; // 初始未修改
 
     m_tabs.append(info);
 
@@ -158,8 +173,14 @@ void MainWindow::addNewTab(const QString &filePath)
         for (int i = 0; i < m_tabs.size(); ++i) {
             if (m_tabs[i].editor == editor) {
                 m_tabs[i].isModified = modified;
-                QString title = m_tabs[i].displayName();
-                m_tabWidget->setTabText(i, modified ? title + " *" : title);
+
+                // ✅ 正确逻辑：只要修改了，就显示 *
+                QString title = m_tabs[i].baseName;
+                if (modified) {
+                    m_tabWidget->setTabText(i, title + " *");
+                } else {
+                    m_tabWidget->setTabText(i, title);
+                }
                 break;
             }
         }
@@ -168,21 +189,41 @@ void MainWindow::addNewTab(const QString &filePath)
     // ------------------------
     // 6. 加载文件内容（如果指定了路径）
     // ------------------------
+    if (filePath.isEmpty()) {
+        // 1. 确保 .autosave 所在目录存在
+        QFileInfo fi(info.autoSavePath);
+        QDir().mkpath(fi.path()); // 创建 temp/ 目录（如果不存在）
+        // 2. 创建空的 .autosave 文件
+        QFile file(info.autoSavePath);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            file.write(editor->text().toUtf8()); // 当前内容（可能为空）
+            file.close();
+        } else {
+            qWarning() << "无法创建自动保存文件:" << info.autoSavePath;
+        }
+        // 3. 将 .autosave 路径加入“最近打开文件”
+        QStringList lastFiles = getLastOpenFiles();
+        lastFiles.removeOne(info.autoSavePath); // 避免重复
+        lastFiles.prepend(info.autoSavePath);
+        while (lastFiles.size() > 10) {
+            lastFiles.removeLast();
+        }
+        setLastOpenFiles(lastFiles);
+        updateRecentFilesMenu(); // 立即更新菜单显示
+    }
     if (!filePath.isEmpty()) {
-        QFile file(filePath); // 注意：用原始 filePath 读内容
+        QFile file(filePath);
         if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             editor->setText(file.readAll());
-            editor->setModified(false); // 内容已加载，标记为未修改
+            editor->setModified(false); // 刚加载，未修改
             file.close();
 
-            // 如果是自动保存恢复，可选提示用户
             if (isAutoSaveRecovery) {
-                // 可选：显示小提示
-                // m_statusBar->showMessage("已恢复: " + baseName, 3000);
+                // 可选提示
+                // statusBar()->showMessage("已恢复: " + baseName, 3000);
             }
         } else {
-            QMessageBox::warning(this, "打开失败", "无法读取文件：" + filePath);
-            // 加载失败：关闭 tab
+            QMessageBox::warning(this, "打开失败", "无法读取：" + filePath);
             m_tabWidget->removeTab(index);
             m_tabs.removeAt(m_tabs.size() - 1);
             editor->deleteLater();
@@ -193,13 +234,7 @@ void MainWindow::addNewTab(const QString &filePath)
     }
 }
 
-void MainWindow::closeTab(int index) {
-    if (!closeTabWithPrompt(index)) {
-        return; // 取消
-    }
-    m_tabWidget->removeTab(index);
-    m_tabs.removeAt(index);
-}
+
 
 bool MainWindow::saveFile(int index) {
     if (index < 0 || index >= m_tabs.size()) return false;
@@ -369,6 +404,182 @@ void MainWindow::restoreLastSession()
             addNewTab(path);
         }
     }
+    updateRecentFilesMenu();
+}
+
+void MainWindow::setupRecentFilesMenu()
+{
+    m_recentFilesMenu = new QMenu("最近打开", this);
+    menuBar()->addMenu(m_recentFilesMenu);
+    // 添加分隔线，保持菜单清晰
+    QAction *separator = m_recentFilesMenu->addSeparator();
+    separator->setObjectName("recentFilesSeparator");
+    // 初始更新
+    updateRecentFilesMenu();
+}
+
+void MainWindow::updateRecentFilesMenu()
+{
+    // === 1. 获取最近文件列表 ===
+    QStringList filePaths = getLastOpenFiles();
+    // === 2. 找到分隔线（作为锚点）===
+    QAction *separator = nullptr;
+    for (QAction *act : m_recentFilesMenu->actions()) {
+        if (act->objectName() == "recentFilesSeparator") {
+            separator = act;
+            break;
+        }
+    }
+    // 如果没有分隔线，说明菜单结构异常，清空重建
+    if (!separator) {
+        m_recentFilesMenu->clear();
+        separator = m_recentFilesMenu->addSeparator();
+        separator->setObjectName("recentFilesSeparator");
+    }
+    // === 3. 删除 separator 之前的所有菜单项（即所有文件项）===
+    while (m_recentFilesMenu->actions().first() != separator) {
+        QAction *action = m_recentFilesMenu->actions().first();
+        m_recentFilesMenu->removeAction(action);
+        delete action; // ✅ 必须 delete，否则内存泄漏 + 菜单残留
+    }
+    // === 4. 删除 separator 之后的所有项（包括旧的“清除”按钮）===
+    bool afterSeparator = false;
+    QList<QAction *> actionsToErase;
+    for (QAction *act : m_recentFilesMenu->actions()) {
+        if (act == separator) {
+            afterSeparator = true;
+            continue;
+        }
+        if (afterSeparator) {
+            actionsToErase.append(act);
+        }
+    }
+    // 反向删除，避免迭代器失效
+    for (int i = actionsToErase.size() - 1; i >= 0; i--) {
+        m_recentFilesMenu->removeAction(actionsToErase[i]);
+        delete actionsToErase[i];
+    }
+    // === 5. 添加菜单项 ===
+    if (filePaths.isEmpty()) {
+        QAction *noFiles = m_recentFilesMenu->addAction("无最近文件");
+        noFiles->setEnabled(false);
+    } else {
+        for (const QString &path : filePaths) {
+            QFileInfo fi(path);
+            QString displayName = fi.fileName();
+
+            if (fi.fileName().endsWith(".autosave", Qt::CaseInsensitive)) {
+                displayName = fi.completeBaseName() + " (已恢复)";
+            }
+
+            QAction *action = m_recentFilesMenu->addAction(displayName);
+            action->setData(path);
+            action->setToolTip(path);
+            connect(action, &QAction::triggered, this, &MainWindow::openRecentFile);
+        }
+    }
+    // === 6. 添加“清除最近文件”按钮 ===
+    QAction *clearAction = m_recentFilesMenu->addAction("清除最近文件");
+    connect(clearAction, &QAction::triggered, this, [this]() {
+        setLastOpenFiles(QStringList());  // 清空配置
+        updateRecentFilesMenu();          // 递归刷新（安全，因为此时列表为空）
+    });
+}
+
+
+void MainWindow::openRecentFile()
+{
+    QAction *action = qobject_cast<QAction *>(sender());
+    if (!action) return;
+
+    QString targetPath = action->data().toString(); // 可能是 .autosave 路径
+    QFileInfo targetFi(targetPath);
+
+    // ---------- 1. 检查文件是否存在 ----------
+    if (targetPath.isEmpty() || !QFile::exists(targetPath)) {
+        QMessageBox::warning(this, "文件不存在", "该文件可能已被删除或移动。\n路径：" + targetPath);
+
+        // 从最近列表中移除
+        QStringList files = getLastOpenFiles();
+        files.removeOne(targetPath);
+        setLastOpenFiles(files);
+        updateRecentFilesMenu();
+        return;
+    }
+
+    // 遍历所有 tab，检查是否已打开
+    for (int i = 0; i < m_tabs.size(); ++i) {
+        const TabInfo &info = m_tabs[i];
+
+        // 情况1：已命名文件
+        if (!info.filePath.isEmpty()) {
+            QFileInfo openedFi(info.filePath);
+            if (openedFi.canonicalFilePath() == targetFi.canonicalFilePath()) {
+                m_tabWidget->setCurrentIndex(i);
+                return;
+            }
+        }
+
+        // 情况2：未命名文件（检查 .autosave 路径）
+        if (info.filePath.isEmpty() && !info.autoSavePath.isEmpty()) {
+            QFileInfo autoFi(info.autoSavePath);
+            if (autoFi.canonicalFilePath() == targetFi.canonicalFilePath()) {
+                m_tabWidget->setCurrentIndex(i);
+                return;
+            }
+        }
+    }
+
+    // ---------- 3. 都没找到 → 新建 tab 恢复 ----------
+    addNewTab(targetPath);
+}
+
+
+void MainWindow::openFileNoPar()
+{
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    QString path = QFileDialog::getOpenFileName(
+        this,
+        "打开文件",
+        dir,
+        "所有文件 (*.*)"
+        );
+    if (!path.isEmpty()) {
+        openFile(path); // 转调有参版本
+    }
+}
+
+void MainWindow::openFile(const QString &path)
+{
+    QFileInfo fi(path);
+    if (!fi.exists()) {
+        QMessageBox::warning(this, "文件不存在", "无法找到文件：" + path);
+        return;
+    }
+    // ---------- 1. 检查是否已打开（避免重复） ----------
+    for (const TabInfo &info : m_tabs) {
+        if (!info.filePath.isEmpty() && QFileInfo(info.filePath).canonicalFilePath() == fi.canonicalFilePath()) {
+            // 文件已打开，切换到该 tab
+            int index = m_tabWidget->indexOf(info.editor);
+            m_tabWidget->setCurrentIndex(index);
+            return;
+        }
+    }
+    // ---------- 2. 更新最近文件列表 ----------
+    QStringList files = getLastOpenFiles();
+    // 从列表中移除（如果已存在）
+    files.removeOne(path);
+    // 将当前文件放到最前面
+    files.prepend(path);
+    // 限制最多 10 个
+    while (files.size() > 10) {
+        files.removeLast();
+    }
+    setLastOpenFiles(files);
+    // ---------- 3. 调用 addNewTab 打开 ----------
+    addNewTab(path); // ✅ 自动处理正常文件和 .autosave
+    // ---------- 4. 更新最近文件菜单 ----------
+    updateRecentFilesMenu();
 }
 
 
@@ -396,6 +607,120 @@ bool MainWindow::closeTabWithPrompt(int index)
         // Discard：直接关闭
     }
     return true; // 可以关闭
+}
+
+void MainWindow::closeTab(int index) {
+    if (!closeTabWithPrompt(index)) {
+        return; // 用户取消关闭
+    }
+
+    TabInfo &info = m_tabs[index];
+
+    // ✅ 获取 .autosave 路径（用于后续判断）
+    QString autoSavePath = info.autoSavePath;
+
+    // 执行关闭
+    m_tabWidget->removeTab(index);
+    delete info.editor; // 记得释放 editor！
+    m_tabs.removeAt(index);
+
+    // ✅ 更新最近打开列表
+    QStringList lastFiles = getLastOpenFiles();
+
+    // 只有当是【未命名 + 未修改】的 tab 时，才需要从 lastFiles 中移除 .autosave 路径
+    // 因为这种 tab 的 .autosave 是空的、无效的，用户可能只是误点“新建”
+//    if (info.filePath.isEmpty() && !info.isModified) {
+//        if (lastFiles.contains(autoSavePath)) {
+//            lastFiles.removeOne(autoSavePath);
+//            setLastOpenFiles(lastFiles); // 立即保存
+//            updateRecentFilesMenu();     // 刷新菜单显示
+//        }
+//        // 可选：删除空的 .autosave 文件
+//        QFile::remove(autoSavePath);
+//    }
+
+}
+
+
+void MainWindow::onSaveAs()
+{
+    int index = m_tabWidget->currentIndex();
+    if (index < 0 || index >= m_tabs.size()) return;
+
+    TabInfo &info = m_tabs[index];
+
+    QString dir;
+    QString defaultSuffix = "txt";
+    if (!info.filePath.isEmpty()) {
+        QFileInfo fi(info.filePath);
+        dir = fi.path();
+        defaultSuffix = fi.suffix();
+    } else {
+        dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    }
+
+    QString defaultFileName = dir + "/" + info.baseName + "." + defaultSuffix;
+    QString fileName = QFileDialog::getSaveFileName(this, "另存为", defaultFileName, "所有文件 (*)");
+    if (fileName.isEmpty()) return;
+
+    QFileInfo fi(fileName);
+    if (fi.suffix().isEmpty()) {
+        fileName += "." + defaultSuffix;
+    }
+
+    QFile file(fileName);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(info.editor->text().toUtf8());
+        file.close();
+
+        // ✅ 1. 更新路径和名称
+        info.filePath = fileName;
+        info.baseName = fi.fileName();
+
+        // ✅ 2. 保存成功 → 内容未修改
+        info.editor->setModified(false); // 这会触发 modificationChanged
+
+        // ✅ 3. 更新最近打开
+        QStringList files = getLastOpenFiles();
+        files.removeOne(fileName);
+        files.prepend(fileName);
+        while (files.size() > 10) files.removeLast();
+        setLastOpenFiles(files);
+        updateRecentFilesMenu();
+
+        // ✅ 4. 删除旧 .autosave
+        if (!info.autoSavePath.isEmpty()) {
+            QFile::remove(info.autoSavePath);
+            info.autoSavePath = autoSavePathForTab(info);
+        }
+    } else {
+        QMessageBox::warning(this, "保存失败", "无法写入：" + fileName);
+    }
+}
+
+void MainWindow::onSave()
+{
+    int index = m_tabWidget->currentIndex();
+    if (index < 0 || index >= m_tabs.size()) return;
+
+    TabInfo &info = m_tabs[index];
+
+    if (info.filePath.isEmpty()) {
+        onSaveAs();
+        updateRecentFilesMenu();
+    } else {
+        // 直接保存到 info.filePath
+        QFile file(info.filePath);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            file.write(info.editor->text().toUtf8());
+            file.close();
+
+            // ✅ 保存成功 → 标记为未修改
+            info.editor->setModified(false); // 自动触发 modificationChanged，清除 *
+        } else {
+            QMessageBox::warning(this, "保存失败", "无法写入：" + info.filePath);
+        }
+    }
 }
 
 
