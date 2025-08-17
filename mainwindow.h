@@ -27,14 +27,19 @@ private slots:
 
     void openFileNoPar();           // 无参数：弹出文件选择对话框
     void openFile(const QString &path); // 有路径：直接打开
+    void onTabMoved(int from, int to);
+
+    void codeHightLightFunction(const QString& language);
 
 protected:
-    void closeEvent(QCloseEvent *event) override;  // ✅ 声明为 protected
+    void closeEvent(QCloseEvent *event) override;  //  声明为 protected
 
 private:
     QsciScintilla *textEdit;
     SqlHighlighter *highlighter;
+    QsciScintilla* getCurrentEditor();
     int m_untitledCount;
+    QFont m_font(const int &fontsize);
     struct TabInfo {
         QsciScintilla *editor;
         QString filePath;     // 实际文件路径，恢复的未命名文件为空
@@ -42,9 +47,10 @@ private:
         bool isModified;
         QString autoSavePath;
         bool neverSavedByUser = true;
+        QString language;
         // 获取显示名称（用于 tab 标签）
         QString displayName() const {
-            return baseName.isEmpty() ? "未命名" : baseName;
+            return baseName.isEmpty() ? "新文件" : baseName;
         }
     };
     QVector<TabInfo> m_tabs;        // 存储所有 tab 信息
@@ -55,15 +61,21 @@ private:
     void autoSaveAll();      // 保存所有可保存的 tab
     QString autoSavePathForTab(const TabInfo &info); // 为每个 tab 生成自动保存路径
 
-    void saveCurrentSession();    // 关闭前保存当前会话
-    void restoreLastSession();    // 启动时恢复会话
+    void saveSession();    // 关闭前保存当前会话
+    void restoreSession();    // 恢复会话
     QStringList getLastOpenFiles(); // 从设置中读取
     void setLastOpenFiles(const QStringList &files); // 写入设置
-    bool closeTabWithPrompt(int index); // ✅ 返回 false 表示取消关闭
+    bool closeTabWithPrompt(int index); //  返回 false 表示取消关闭
+
+    bool formatJson(); //JSON美化
+    bool formatXml();  //XML美化
 
     QMenu *m_recentFilesMenu;
     void setupRecentFilesMenu();
     void updateRecentFilesMenu();
+
+    void setEditorLexer(QsciScintilla *editor, const QString &language);
+    void setLexerForLanguage(QsciScintilla *editor, const QString &language);
 
     void onSave();           // Ctrl+S
     void onSaveAs();         // Ctrl+Shift+S

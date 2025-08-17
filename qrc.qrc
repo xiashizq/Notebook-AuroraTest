@@ -1,5 +1,8 @@
 <RCC>
     <qresource prefix="/">
         <file>iocn1.png</file>
+        <file>imageSrc/save.png</file>
+        <file>imageSrc/add.png</file>
+        <file>imageSrc/saveAs.png</file>
     </qresource>
 </RCC>

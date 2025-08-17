@@ -9,8 +9,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Xml)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Xml)
 add_definitions(-DQSCINTILLA_DLL)
 
 set(PROJECT_SOURCES
@@ -57,6 +57,7 @@ set(QScintillaLib_LIBS "${QScintillaLib_DIR}/lib/qscintilla2_qt5.lib")
 
 target_link_libraries(Notebook PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Xml
     ${QScintillaLib_LIBS}
 )
 
