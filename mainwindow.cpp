@@ -31,6 +31,9 @@
 #include <QJsonDocument>
 #include <QDomDocument>
 #include <QToolBar>
+#include <QLineEdit>
+#include <QLabel>
+#include <QCheckBox>
 
 #pragma execution_character_set("utf-8")
 
@@ -86,7 +89,6 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
     beautifyMenu->addAction(xmlBTYAction);
     connect(jsonBTYAction, &QAction::triggered, this, &MainWindow::formatJson);
     connect(xmlBTYAction, &QAction::triggered, this, &MainWindow::formatXml);
-
     connect(newWindowAction, &QAction::triggered, this, &MainWindow::openNewWindow);
 
     QMenu *codeHightLight = menuBar->addMenu("代码高亮");
@@ -128,7 +130,10 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
     });
 
 
-
+    QMenu *diffMenu = menuBar->addMenu("对比工具");
+    QAction *diffHJAction = new QAction("行级对比", this);
+    diffMenu->addAction(diffHJAction);
+    connect(diffHJAction, &QAction::triggered, this, &MainWindow::openDiffWidget);
 
 
 
@@ -213,6 +218,12 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
     saveAsAct->setShortcut(QKeySequence::SaveAs);
     connect(saveAsAct, &QAction::triggered, this, &MainWindow::onSaveAs);
     this->addAction(saveAsAct);
+
+    // Ctrl+F 打开搜索
+    QAction *findAction = new QAction(this);
+    findAction->setShortcut(QKeySequence::Find);
+    connect(findAction, &QAction::triggered, this, &MainWindow::openFindReplaceDialog);
+    this->addAction(findAction); // 添加到窗口
 
     restoreSession();
 }
@@ -1071,4 +1082,245 @@ void MainWindow::onSave()
     }
 }
 
+
+void MainWindow::openFindReplaceDialog()
+{
+    QsciScintilla *editor = getCurrentEditor();
+    if (!editor) return;
+    // 如果已打开，就激活
+    if (m_findReplaceDialog) {
+        m_findReplaceDialog->raise();
+        m_findReplaceDialog->activateWindow();
+        return;
+    }
+    m_findReplaceDialog = new QDialog(this);
+    m_findReplaceDialog->setWindowTitle("查找和替换");
+    m_findReplaceDialog->resize(320, 160);
+    m_findReplaceDialog->setAttribute(Qt::WA_DeleteOnClose);
+    m_findReplaceDialog->setWindowFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    connect(m_findReplaceDialog, &QDialog::finished, this, [this]() {
+        m_findReplaceDialog = nullptr;
+        m_findStarted = false; // 关闭时重置状态
+    });
+    // === UI 控件 ===
+    auto *findEdit = new QLineEdit(m_findReplaceDialog);
+    auto *replaceEdit = new QLineEdit(m_findReplaceDialog);
+    auto *caseCheck = new QCheckBox("区分大小写", m_findReplaceDialog);
+    auto *wrapCheck = new QCheckBox("循环查找", m_findReplaceDialog);
+    wrapCheck->setChecked(true);
+    auto *regexCheck = new QCheckBox("正则表达式", m_findReplaceDialog);
+    regexCheck->setToolTip("启用后，\\n \\t ^ $ . * + 等作为正则语法");
+    auto *findButton = new QPushButton("查找下一个", m_findReplaceDialog);
+    auto *replaceButton = new QPushButton("替换", m_findReplaceDialog);
+    auto *replaceAllButton = new QPushButton("全部替换", m_findReplaceDialog);
+    auto *closeButton = new QPushButton("关闭", m_findReplaceDialog);
+    // 布局
+    auto *topLayout = new QGridLayout;
+    topLayout->addWidget(new QLabel("查找："), 0, 0);
+    topLayout->addWidget(findEdit, 0, 1);
+    topLayout->addWidget(new QLabel("替换为："), 1, 0);
+    topLayout->addWidget(replaceEdit, 1, 1);
+    topLayout->addWidget(caseCheck, 2, 0);
+    topLayout->addWidget(wrapCheck, 2, 1);
+    topLayout->addWidget(regexCheck, 3, 0, 1, 2);
+    auto *buttonLayout = new QHBoxLayout;
+    buttonLayout->addWidget(findButton);
+    buttonLayout->addWidget(replaceButton);
+    buttonLayout->addWidget(replaceAllButton);
+    buttonLayout->addWidget(closeButton);
+    auto *mainLayout = new QVBoxLayout(m_findReplaceDialog);
+    mainLayout->addLayout(topLayout);
+    mainLayout->addLayout(buttonLayout);
+    // === 功能实现（同上）===
+    QObject::connect(findButton, &QPushButton::clicked, [=]() {
+        QsciScintilla *currentEditor = getCurrentEditor();
+        if (!currentEditor) {
+            QMessageBox::warning(m_findReplaceDialog, "错误", "当前没有打开的编辑器。");
+            return;
+        }
+        m_findStarted = false; // 重置“替换”状态，确保从当前光标开始
+        QString findText = findEdit->text();
+        if (findText.isEmpty()) return;
+        bool useRegex = regexCheck->isChecked();
+        bool cs = caseCheck->isChecked();
+        // 正则模式：用原始字符串；普通模式：解析 \n \t
+        QString textToFind = useRegex ? findText : unescapeString(findText);
+        bool found = editor->findFirst(
+            textToFind,           // 查找内容
+            false,                // 向前查找
+            cs,                   // 区分大小写
+            useRegex,             // 是否正则
+            true,                 // wholeWord: 可加 checkbox 控制
+            true,                 // 允许空搜索
+            -1, -1,               // 从当前光标开始
+            wrapCheck->isChecked() // 循环查找
+        );
+        if (!found) {
+            QMessageBox::information(m_findReplaceDialog, "查找", "未找到 \"" + findText + "\"");
+        }
+    });
+    QObject::connect(replaceButton, &QPushButton::clicked, [=]() {
+        QsciScintilla *currentEditor = getCurrentEditor();
+        if (!currentEditor) {
+            QMessageBox::warning(m_findReplaceDialog, "错误", "当前没有打开的编辑器。");
+            return;
+        }
+        QString findText = findEdit->text();
+        if (findText.isEmpty()) return;
+        bool useRegex = regexCheck->isChecked();
+        bool cs = caseCheck->isChecked();
+        QString textToFind = useRegex ? findText : unescapeString(findText);
+        // 第一次点击：启动查找
+        if (!m_findStarted) {
+            m_findStarted = true;
+            bool found = currentEditor->findFirst(
+                textToFind, false, cs, useRegex, true, true, -1, -1, wrapCheck->isChecked()
+            );
+            if (!found) {
+                QMessageBox::information(m_findReplaceDialog, "替换", "未找到 \"" + findText + "\"");
+                m_findStarted = false;
+            }
+            return;
+        }
+        // 已有匹配，执行替换
+        if (currentEditor->hasSelectedText()) {
+            QString selected = currentEditor->selectedText();
+            bool matches = useRegex ? true : // 正则模式下 assume 匹配
+                          (cs ? selected == textToFind : selected.toLower() == textToFind.toLower());
+            if (matches) {
+                QString replaceText = unescapeString(replaceEdit->text());
+                currentEditor->replaceSelectedText(replaceText);
+            }
+        }
+        // 查找下一个
+        bool found = currentEditor->findNext();
+        if (!found) {
+            QMessageBox::information(m_findReplaceDialog, "替换", "已到末尾，未找到更多匹配项。");
+            m_findStarted = false;
+        }
+    });
+
+    QObject::connect(replaceAllButton, &QPushButton::clicked, [=]() {
+        QsciScintilla *currentEditor = getCurrentEditor();
+        if (!currentEditor) return;
+        QString findText = findEdit->text();
+        if (findText.isEmpty()) return;
+        QString replaceTextStr = replaceEdit->text();
+        bool useRegex = regexCheck->isChecked();
+        bool cs = caseCheck->isChecked();
+        QString text = currentEditor->text();
+        int count = 0;
+        QString result;
+        if (useRegex) {
+            // 正则模式
+            QString literalPattern = unescapeString(findText);
+            QRegularExpression::PatternOptions options = cs ?
+                        QRegularExpression::NoPatternOption :
+                        QRegularExpression::CaseInsensitiveOption;
+            QRegularExpression regex(literalPattern, options);
+            if (!regex.isValid()) {
+                QMessageBox::warning(m_findReplaceDialog, "正则错误", "正则表达式无效：" + regex.errorString());
+                return;
+            }
+            // 统计匹配次数
+            QRegularExpressionMatchIterator it = regex.globalMatch(text);
+            count = 0;
+            while (it.hasNext()) {
+                it.next();
+                count++;
+            }
+            // 执行替换
+            result = text.replace(regex, unescapeString(replaceTextStr));
+        } else {
+            // 普通模式：支持 \n \t 的全局替换（修复版）
+            QString searchText = unescapeString(findText);
+            QString replaceText = unescapeString(replaceTextStr);
+            if (searchText.isEmpty()) {
+                count = 0;
+                result = text;
+            } else {
+                result = text;
+                int pos = 0;
+                count = 0;
+                Qt::CaseSensitivity csOption = cs ? Qt::CaseSensitive : Qt::CaseInsensitive;
+                while ((pos = result.indexOf(searchText, pos, csOption)) != -1) {
+                    result.replace(pos, searchText.length(), replaceText);
+                    pos += replaceText.length();
+                    count++;
+                }
+            }
+        }
+        // 一次性写回
+        if (count > 0) {
+            currentEditor->beginUndoAction();
+            currentEditor->selectAll();
+            currentEditor->replaceSelectedText(result);
+            currentEditor->endUndoAction();
+            showMessageInCenter("完成", QString("已完成 %1 处替换").arg(count));
+        } else {
+            QMessageBox::information(m_findReplaceDialog, "全部替换", "未找到匹配项。");
+        }
+    });
+    // 关闭按钮
+    QObject::connect(closeButton, &QPushButton::clicked, m_findReplaceDialog, &QDialog::accept);
+    connect(m_findReplaceDialog, &QDialog::finished, this, [this]() {
+        m_findReplaceDialog = nullptr;
+        m_findStarted = false; // 重置状态
+    });
+    // 回车 = 查找
+    QObject::connect(findEdit, &QLineEdit::returnPressed, findButton, &QPushButton::click);
+    // 显示为非模态窗口
+    m_findReplaceDialog->show();
+    findEdit->setFocus(); // 聚焦搜索框
+}
+
+
+QString MainWindow::unescapeString(const QString &input) {
+    QString result;
+    result.reserve(input.size());
+    for (int i = 0; i < input.size(); ++i) {
+        QChar c = input[i];
+        if (c == '\\' && i < input.size() - 1) {
+            QChar next = input[i + 1];
+            switch (next.toLatin1()) {
+            case 'n':  result += '\n'; i++; break;
+            case 't':  result += '\t'; i++; break;
+            case 'r':  result += '\r'; i++; break;
+            case 's':  result += ' ';  i++; break; // \s 视为空格
+            case '\\': result += '\\'; i++; break;
+            case '0':  result += '\0'; i++; break;
+            default:   result += c; break; // 保留原样，如 \w \d 等（正则中由引擎处理）
+            }
+        } else {
+            result += c;
+        }
+    }
+    return result;
+}
+
+
+// 封装一个函数：在主窗口居中显示消息框
+void MainWindow::showMessageInCenter(const QString &title, const QString &text)
+{
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle(title);
+    msgBox.setText(text);
+    msgBox.setIcon(QMessageBox::Information);
+    // 设置对话框在 MainWindow 居中
+    msgBox.move(this->x() + this->width()/2 - msgBox.width()/2,
+                this->y() + this->height()/2 - msgBox.height()/2);
+    msgBox.exec(); // 模态显示，但只阻塞主窗口
+}
+
+void MainWindow::openDiffWidget() {
+
+
+    // 非模态窗口，可以多开
+    DiffWidget* w = new DiffWidget();
+    w->setAttribute(Qt::WA_DeleteOnClose); // 自动释放
+    w->setWindowTitle("行级字符/代码对比工具");
+    w->resize(900,600);
+    w->show();
+    // 如果想要模态弹窗，可以改成QDialog并用 exec()
+}
 

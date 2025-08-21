@@ -26,6 +26,10 @@ set(PROJECT_SOURCES
         CodeEditor/CodeEditor.cpp
         SqlParserWindow/SqlParserWindow.h
         SqlParserWindow/SqlParserWindow.cpp
+        DiffFunction/myersDiff.h
+        DiffFunction/myersDiff.cpp
+        DiffFunction/DiffWidget.h
+        DiffFunction/DiffWidget.cpp
         qrc.qrc
 )
 

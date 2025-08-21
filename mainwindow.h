@@ -3,9 +3,11 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QEvent>
+#include "DiffFunction/DiffWidget.h"
 class QsciScintilla;
 class SqlHighlighter;
 class SqlLexer;
+class DiffWidget;
 #pragma execution_character_set("utf-8")
 
 class MainWindow : public QMainWindow
@@ -31,6 +33,9 @@ private slots:
 
     void codeHightLightFunction(const QString& language);
 
+    void openDiffWidget();
+
+
 protected:
     void closeEvent(QCloseEvent *event) override;  //  声明为 protected
 
@@ -39,6 +44,7 @@ private:
     SqlHighlighter *highlighter;
     QsciScintilla* getCurrentEditor();
     int m_untitledCount;
+    bool m_findStarted = false;
     QFont m_font(const int &fontsize);
     struct TabInfo {
         QsciScintilla *editor;
@@ -82,4 +88,10 @@ private:
     void onCloseTab();       // Ctrl+W
     void onNewFile();        // Ctrl+N
     void onOpenFile();       // Ctrl+O
+
+    QDialog *m_findReplaceDialog = nullptr; // 查找替换窗口（非模态）
+    void openFindReplaceDialog(); //查找替换窗口（非模态）
+    void showMessageInCenter(const QString &title, const QString &text); //主窗口弹窗效果
+    QString unescapeString(const QString& s);
+
 };
