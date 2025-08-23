@@ -4,5 +4,8 @@
         <file>imageSrc/save.png</file>
         <file>imageSrc/add.png</file>
         <file>imageSrc/saveAs.png</file>
+        <file>imageSrc/diffstart.png</file>
+        <file>imageSrc/stopdiff.png</file>
+        <file>imageSrc/find.png</file>
     </qresource>
 </RCC>

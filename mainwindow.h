@@ -4,10 +4,12 @@
 #include <QFileInfo>
 #include <QEvent>
 #include "DiffFunction/DiffWidget.h"
+#include "folderDiff/CompareDialog.h"
 class QsciScintilla;
 class SqlHighlighter;
 class SqlLexer;
 class DiffWidget;
+class CompareDialog;
 #pragma execution_character_set("utf-8")
 
 class MainWindow : public QMainWindow
@@ -34,6 +36,7 @@ private slots:
     void codeHightLightFunction(const QString& language);
 
     void openDiffWidget();
+    void onOpenFolderCompareTool();
 
 
 protected:

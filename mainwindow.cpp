@@ -131,9 +131,12 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
 
 
     QMenu *diffMenu = menuBar->addMenu("对比工具");
+    QAction *folderDiffHJAction = new QAction("文件夹对比", this);
     QAction *diffHJAction = new QAction("行级对比", this);
+    diffMenu->addAction(folderDiffHJAction);
     diffMenu->addAction(diffHJAction);
     connect(diffHJAction, &QAction::triggered, this, &MainWindow::openDiffWidget);
+    connect(folderDiffHJAction, &QAction::triggered, this, &MainWindow::onOpenFolderCompareTool);
 
 
 
@@ -1322,5 +1325,15 @@ void MainWindow::openDiffWidget() {
     w->resize(900,600);
     w->show();
     // 如果想要模态弹窗，可以改成QDialog并用 exec()
+}
+
+void MainWindow::onOpenFolderCompareTool()
+{
+    // 创建一个非模态对话框（允许主窗口操作）
+    CompareDialog *dialog = new CompareDialog();
+    dialog->setAttribute(Qt::WA_DeleteOnClose); // 关闭时自动删除
+    dialog->show();
+    // 如果你想模态弹窗，用：
+    // dialog->exec(); // 会阻塞主窗口
 }
 

@@ -126,8 +126,8 @@ DiffWidget::DiffWidget(QWidget* parent): QWidget(parent) {
     auto* editLayout = new QHBoxLayout();
     leftEdit = new QTextEdit(this);
     rightEdit = new QTextEdit(this);
-    leftEdit->setPlaceholderText("请输入");
-    rightEdit->setPlaceholderText("请输入");
+    leftEdit->setPlaceholderText("请输入旧字符/代码");
+    rightEdit->setPlaceholderText("请输入新字符/代码");
 
     leftEdit->setFont(m_font(12));
     rightEdit->setFont(m_font(12));

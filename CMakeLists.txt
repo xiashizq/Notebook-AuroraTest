@@ -31,6 +31,53 @@ set(PROJECT_SOURCES
         DiffFunction/DiffWidget.h
         DiffFunction/DiffWidget.cpp
         qrc.qrc
+
+        folderDiff/util/zfile.h
+        folderDiff/widget/tree/ztreemodel.h
+        folderDiff/widget/tree/ztreeitem.h
+        folderDiff/widget/ztopwidget.h
+        folderDiff/widget/zcenterwidget.h
+        folderDiff/diff/zfilediffmodel.h
+        folderDiff/diff/zfilediff.h
+        folderDiff/diff/zpathdiffmodel.h
+        folderDiff/diff/zpathdiff.h
+        folderDiff/ctl/zfolderctl.h
+        folderDiff/widget/tree/ztreeitemmodel.h
+        folderDiff/env/zcons.h
+        folderDiff/widget/folder/zfolderwidget.h
+        folderDiff/widget/file/zfilewidget.h
+        folderDiff/widget/file/zdiffinfo.h
+        folderDiff/widget/file/zlinenumberwidget.h
+        folderDiff/widget/file/zdiffareawidget.h
+        folderDiff/widget/file/ztextwidget.h
+        folderDiff/widget/file/zscrolltextwidget.h
+        folderDiff/widget/file/zdiffarea.h
+        folderDiff/FolderCompareWidget.h
+        folderDiff/CompareDialog.h
+
+        folderDiff/util/zfile.cpp
+        folderDiff/widget/tree/ztreemodel.cpp
+        folderDiff/widget/tree/ztreeitem.cpp
+        folderDiff/widget/ztopwidget.cpp
+        folderDiff/widget/zcenterwidget.cpp
+        folderDiff/diff/zfilediff.cpp
+        folderDiff/diff/zfilediffmodel.cpp
+        folderDiff/diff/zpathdiffmodel.cpp
+        folderDiff/diff/zpathdiff.cpp
+        folderDiff/ctl/zfolderctl.cpp
+        folderDiff/widget/tree/ztreeitemmodel.cpp
+        folderDiff/widget/folder/zfolderwidget.cpp
+        folderDiff/widget/file/zfilewidget.cpp
+        folderDiff/widget/file/zdiffinfo.cpp
+        folderDiff/widget/file/zlinenumberwidget.cpp
+        folderDiff/widget/file/zdiffareawidget.cpp
+        folderDiff/widget/file/ztextwidget.cpp
+        folderDiff/widget/file/zscrolltextwidget.cpp
+        folderDiff/widget/file/zdiffarea.cpp
+        folderDiff/FolderCompareWidget.cpp
+        folderDiff/CompareDialog.cpp
+
+
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -57,6 +104,11 @@ set(QScintillaLib_INCLUDE_DIRS "${QScintillaLib_DIR}/include")
 include_directories(${QScintillaLib_INCLUDE_DIRS})
 link_directories(${QScintillaLib_DIR}/lib)
 set(QScintillaLib_LIBS "${QScintillaLib_DIR}/lib/qscintilla2_qt5.lib")
+
+target_include_directories(Notebook PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/folderDiff
+)
+
 
 
 target_link_libraries(Notebook PRIVATE
