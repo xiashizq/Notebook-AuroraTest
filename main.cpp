@@ -25,6 +25,9 @@ int main(int argc, char *argv[])
     //创建应用
     QApplication app(argc, argv);
 
+    QCoreApplication::setOrganizationName("AuroraTestTech");
+    QCoreApplication::setApplicationName("Notebook-AuroraTest");
+
     QFont font;
     font.setFamily("Microsoft YaHei");     // 推荐：微软雅黑（Windows）
     // font.setFamily("SimHei");           // 黑体（无衬线，清晰）

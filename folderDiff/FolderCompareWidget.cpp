@@ -11,10 +11,7 @@ FolderCompareWidget::FolderCompareWidget(QWidget *parent)
 
 FolderCompareWidget::~FolderCompareWidget()
 {
-    // 注意：由于 mTopWidget 和 mCenterWidget 都设置了 this 为 parent，
-    // 在 QWidget 析构时会自动 delete 子对象，所以这里可以省略 delete。
-    // 如果你没有在 initUI 中设置 parent，请保留 delete。
-    // 当前写法中 new 时传了 this，因此无需手动删除。
+
 }
 
 void FolderCompareWidget::initData()
@@ -24,12 +21,10 @@ void FolderCompareWidget::initData()
 
 void FolderCompareWidget::initUI()
 {
-    // ✅ 移除这一行，或设为 0
     this->setContentsMargins(0, 0, 0, 0); // 不要在这里设边距！
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setSpacing(0);
 
-    // ✅ 只在这里统一设置布局边距（推荐）
     mainLayout->setContentsMargins(
         STANDARD_MARGIN,  // left
         STANDARD_MARGIN,  // top    → 这才是你想要的顶部边距

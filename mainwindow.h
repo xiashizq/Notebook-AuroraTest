@@ -1,10 +1,12 @@
 ﻿#pragma once
 #include <QMainWindow>
+#include <QApplication>
 #include <QDebug>
 #include <QFileInfo>
 #include <QEvent>
 #include "DiffFunction/DiffWidget.h"
 #include "folderDiff/CompareDialog.h"
+#include "jsvariablereplacer/jsvariablereplacer.h"
 class QsciScintilla;
 class SqlHighlighter;
 class SqlLexer;
@@ -37,6 +39,8 @@ private slots:
 
     void openDiffWidget();
     void onOpenFolderCompareTool();
+
+    void showJSVariableReplacerWindow();
 
 
 protected:
@@ -96,5 +100,7 @@ private:
     void openFindReplaceDialog(); //查找替换窗口（非模态）
     void showMessageInCenter(const QString &title, const QString &text); //主窗口弹窗效果
     QString unescapeString(const QString& s);
+
+    JSVariableReplacer *jsVarReplacerWindow;
 
 };

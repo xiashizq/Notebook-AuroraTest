@@ -7,5 +7,6 @@
         <file>imageSrc/diffstart.png</file>
         <file>imageSrc/stopdiff.png</file>
         <file>imageSrc/find.png</file>
+        <file>imageSrc/remove.png</file>
     </qresource>
 </RCC>

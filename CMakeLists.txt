@@ -9,8 +9,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Xml)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Xml)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Xml Qml)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Xml Qml)
 add_definitions(-DQSCINTILLA_DLL)
 
 set(PROJECT_SOURCES
@@ -30,6 +30,8 @@ set(PROJECT_SOURCES
         DiffFunction/myersDiff.cpp
         DiffFunction/DiffWidget.h
         DiffFunction/DiffWidget.cpp
+        jsvariablereplacer/jsvariablereplacer.h
+        jsvariablereplacer/jsvariablereplacer.cpp
         qrc.qrc
 
         folderDiff/util/zfile.h
@@ -78,6 +80,8 @@ set(PROJECT_SOURCES
         folderDiff/CompareDialog.cpp
 
 
+
+
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -114,6 +118,7 @@ target_include_directories(Notebook PRIVATE
 target_link_libraries(Notebook PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Xml
+    Qt${QT_VERSION_MAJOR}::Qml
     ${QScintillaLib_LIBS}
 )
 

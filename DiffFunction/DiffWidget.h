@@ -8,6 +8,7 @@ class DiffWidget : public QWidget {
     Q_OBJECT
 public:
     explicit DiffWidget(QWidget* parent = nullptr);
+    void setFiles(const QString& srcFile, const QString& dstFile);
 
 private slots:
     void doDiff();

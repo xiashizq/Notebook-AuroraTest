@@ -153,6 +153,32 @@ DiffWidget::DiffWidget(QWidget* parent): QWidget(parent) {
     connect(rightFileBtn, &QPushButton::clicked, this, &DiffWidget::selectRightFile);
 }
 
+void DiffWidget::setFiles(const QString& srcFile, const QString& dstFile){
+    leftEdit->hide();
+    rightEdit->hide();
+    diffBtn->hide();
+    leftFileEdit->setDisabled(true);
+    rightFileEdit->setDisabled(true);
+    leftFileBtn->setDisabled(true);
+    rightFileBtn->setDisabled(true);
+    if (!srcFile.isEmpty()) {
+        leftFileEdit->setText(srcFile);
+        QFile file(srcFile);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            leftEdit->setPlainText(QString::fromUtf8(file.readAll()));
+        }
+    }
+
+    if (!dstFile.isEmpty()) {
+        rightFileEdit->setText(dstFile);
+        QFile file(dstFile);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            rightEdit->setPlainText(QString::fromUtf8(file.readAll()));
+        }
+    }
+    doDiff();
+}
+
 // 文件选择槽函数实现
 void DiffWidget::selectLeftFile() {
     QString filePath = QFileDialog::getOpenFileName(this, "选择左侧文件");

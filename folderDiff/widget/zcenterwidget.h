@@ -1,4 +1,4 @@
-#ifndef ZCENTERWIDGET
+﻿#ifndef ZCENTERWIDGET
 #define ZCENTERWIDGET
 
 #include <QtWidgets>
@@ -9,7 +9,7 @@ class ZCenterWidget : public QWidget{
     Q_OBJECT
 
 public:
-    ZCenterWidget(QWidget *parent = 0);
+    ZCenterWidget(QWidget *parent = nullptr);
     ~ZCenterWidget();
 
 public slots:
@@ -17,6 +17,8 @@ public slots:
     void startOrRecompare();
     void stopCompare();
     void onFileCompare(ZPathDiffModel pathDiffModel);
+    void openFileDiffDialog(QString srcPath,QString dstPath);
+
 
 protected:
     void paintEvent(QPaintEvent *) Q_DECL_OVERRIDE;

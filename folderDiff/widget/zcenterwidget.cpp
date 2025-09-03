@@ -1,6 +1,7 @@
 ﻿#include "zcenterwidget.h"
 #include "widget/folder/zfolderwidget.h"
-
+#include "../DiffFunction/DiffWidget.h"
+#pragma execution_character_set("utf-8")
 ZCenterWidget::ZCenterWidget(QWidget *parent)
     :QWidget(parent)
 {
@@ -75,5 +76,16 @@ void ZCenterWidget::onFileCompare(ZPathDiffModel pathDiffModel)
     QString dstPath = pathDiffModel.dstFileInfo().absoluteFilePath();
     qDebug() << srcPath;
     qDebug() << dstPath;
+    openFileDiffDialog(srcPath,dstPath);
 }
+
+void ZCenterWidget::openFileDiffDialog(QString srcPath,QString dstPath){
+    DiffWidget* w = new DiffWidget();
+    w->setAttribute(Qt::WA_DeleteOnClose); // 自动释放
+    w->setWindowTitle("行级字符/代码对比结果");
+    w->setFiles(srcPath,dstPath);
+    w->resize(900,600);
+    w->show();
+}
+
 

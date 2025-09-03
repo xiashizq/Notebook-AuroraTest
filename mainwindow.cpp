@@ -37,7 +37,7 @@
 
 #pragma execution_character_set("utf-8")
 
-
+int mfontContentSize = 11;
 
 
 MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
@@ -45,6 +45,9 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
 
     this->setWindowTitle("Notebook-AuroraTest");
     this->setWindowIcon(QIcon(":/iocn1.png"));
+
+    jsVarReplacerWindow = nullptr;
+
     auto *central = new QWidget(this);
     auto *layout = new QVBoxLayout(central);
 
@@ -81,6 +84,12 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
 
     QAction *newWindowAction = new QAction("新建SqlParser窗口", this);
     fileMenu->addAction(newWindowAction);
+    connect(newWindowAction, &QAction::triggered, this, &MainWindow::openNewWindow);
+
+    QAction *showJSVarReplacerAction = new QAction("新建JSParser窗口", this);
+    fileMenu->addAction(showJSVarReplacerAction);
+    connect(showJSVarReplacerAction, &QAction::triggered, this, &MainWindow::showJSVariableReplacerWindow);
+
 
     QMenu *beautifyMenu = menuBar->addMenu("美化");
     QAction *jsonBTYAction = new QAction("JSON美化", this);
@@ -89,7 +98,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
     beautifyMenu->addAction(xmlBTYAction);
     connect(jsonBTYAction, &QAction::triggered, this, &MainWindow::formatJson);
     connect(xmlBTYAction, &QAction::triggered, this, &MainWindow::formatXml);
-    connect(newWindowAction, &QAction::triggered, this, &MainWindow::openNewWindow);
+
 
     QMenu *codeHightLight = menuBar->addMenu("代码高亮");
     QAction *pythonHlAction = new QAction("Python", this);
@@ -279,14 +288,14 @@ void MainWindow::setLexerForLanguage(QsciScintilla *editor, const QString &langu
         editor->setLexer(nullptr);
         editor->setColor(Qt::black);
         editor->setPaper(Qt::white);
-        editor->setFont(m_font(12));
+        editor->setFont(m_font(mfontContentSize));
         editor->SendScintilla(QsciScintilla::SCI_STYLECLEARALL);
         return;
     } else {
         editor->setLexer(nullptr);
         return;
     }
-    lexer->setFont(m_font(12));
+    lexer->setFont(m_font(mfontContentSize));
     editor->setLexer(lexer);
 }
 
@@ -786,6 +795,15 @@ void MainWindow::closeEvent(QCloseEvent *event)
         }
     }
     saveSession();
+    // 可选：询问是否退出
+    if (QMessageBox::question(this, "退出", "确定要退出程序吗？")
+        == QMessageBox::No) {
+        event->ignore();
+        return;
+    }
+
+    // 方式1：推荐 - 优雅退出
+    qApp->quit();
     event->accept();
 }
 
@@ -1335,5 +1353,20 @@ void MainWindow::onOpenFolderCompareTool()
     dialog->show();
     // 如果你想模态弹窗，用：
     // dialog->exec(); // 会阻塞主窗口
+}
+
+
+void MainWindow::showJSVariableReplacerWindow()
+{
+    if (!jsVarReplacerWindow) {
+        jsVarReplacerWindow = new JSVariableReplacer(); // Parent it to MainWindow
+        // Optional: Connect destroyed signal for extra safety, though parent-child usually handles it.
+        // connect(jsVarReplacerWindow, &QObject::destroyed, this, [this]() { this->jsVarReplacerWindow = nullptr; });
+        // Note: If parent-child is used, the lambda might be called on a partially destroyed object.
+        // The standard parent-child deletion is usually sufficient.
+    }
+    jsVarReplacerWindow->show();
+    jsVarReplacerWindow->raise();
+    jsVarReplacerWindow->activateWindow();
 }
 
