@@ -9,6 +9,11 @@ class QTextEdit;
 class QPushButton;
 class QTabWidget;
 class QAction;
+
+class CodeEditor;
+class SqlHighlighter;
+class SqlLexer;
+
 struct Workspace;
 
 class JSVariableReplacer : public QWidget
@@ -22,6 +27,7 @@ public:
 protected:
     void closeEvent(QCloseEvent *event) override;
 
+
 private slots:
     void runScriptAndReplace();
     void addNewWorkspace();
@@ -29,6 +35,8 @@ private slots:
     void onScriptChanged();
     void onTemplateChanged();
     void onTabChanged(int index);
+
+    void onCursorChanged();
 
 private:
     void setupUI();
@@ -48,6 +56,11 @@ private:
     int workspaceCounter;
 
     QSettings settings; // This will use QCoreApplication name/org set in main()
+
+    QFont m_font(const int &fontsize);
+
+    int mfontContentSize = 11;
+
 };
 
 #endif // JSVARIABLEREPLACER_H

@@ -1,4 +1,17 @@
 ﻿#include "jsvariablereplacer.h"
+
+#include "../CodeEditor/CodeEditor.h"
+#include "../SqlFormat/SqlHighlighter.h"
+#include "../SqlFormat/SqlParser.h"
+
+#include <Qsci/qsciscintilla.h>
+#include <Qsci/qscilexerpython.h>
+#include <Qsci/qscilexercpp.h>
+#include <Qsci/qscilexerxml.h>
+#include <Qsci/qscilexerjavascript.h>
+#include <Qsci/qscilexerjava.h>
+#include <Qsci/qsciapis.h>
+
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -18,7 +31,12 @@
 #include <QStyle> // For standard icons
 #include <QUuid> // 保留，以防未来需要在 C++ 端注入
 #include <QRegularExpression>
+#include <QPlainTextEdit>
+
 #pragma execution_character_set("utf-8")
+
+
+
 // --- Define the Workspace structure ---
 struct Workspace {
     QWidget *containerWidget;
@@ -26,15 +44,24 @@ struct Workspace {
     QWidget *scriptEditorTab;
     QWidget *runTemplateTab;
     QWidget *resultTab;
-    QTextEdit *scriptEditorTextEdit;
-    QTextEdit *templateTextEdit;
+    QsciScintilla *scriptEditorTextEdit;
+    CodeEditor *templateTextEdit;
     QPushButton *runButton;
     QTextEdit *resultDisplayTextEdit;
+    SqlHighlighter *highlighter;
 
-    Workspace() : containerWidget(nullptr), innerTabWidget(nullptr),
-        scriptEditorTab(nullptr), runTemplateTab(nullptr), resultTab(nullptr),
-        scriptEditorTextEdit(nullptr), templateTextEdit(nullptr),
-        runButton(nullptr), resultDisplayTextEdit(nullptr) {}
+
+    Workspace() :
+        containerWidget(nullptr),
+        innerTabWidget(nullptr),
+        scriptEditorTab(nullptr),
+        runTemplateTab(nullptr),
+        resultTab(nullptr),
+        scriptEditorTextEdit(nullptr),
+        templateTextEdit(nullptr),
+        runButton(nullptr),
+        resultDisplayTextEdit(nullptr),
+        highlighter(nullptr){}
 };
 
 // --- Constants for QSettings keys ---
@@ -42,6 +69,20 @@ const QString SETTINGS_WORKSPACE_COUNT_KEY = "workspace_count";
 const QString SETTINGS_WORKSPACE_SCRIPT_KEY_PREFIX = "workspace_script_";
 const QString SETTINGS_WORKSPACE_TEMPLATE_KEY_PREFIX = "workspace_template_";
 const QString SETTINGS_ACTIVE_WORKSPACE_INDEX_KEY = "active_workspace_index";
+
+
+QFont JSVariableReplacer::m_font(const int &fontsize){
+#ifdef Q_OS_WIN
+    QFont font("Consolas", fontsize);
+    return font;
+#elif defined(Q_OS_MAC)
+    QFont m_font("Menlo", fontsize);
+    return font;
+#else
+    QFont m_font("DejaVu Sans Mono", fontsize);
+    return font;
+#endif
+}
 
 // --- Member variables (assuming they are declared in the header) ---
 // QTabWidget *mainWorkspaceTabWidget;
@@ -100,6 +141,11 @@ void JSVariableReplacer::closeEvent(QCloseEvent *event)
 void JSVariableReplacer::setupUI()
 {
     qDebug() << "setupUI: Start";
+
+
+
+
+
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
     QHBoxLayout *buttonLayout = new QHBoxLayout();
@@ -206,6 +252,9 @@ void JSVariableReplacer::createWorkspace(int index, const QString& scriptContent
     qDebug() << "createWorkspace: Start for index" << index;
     Workspace *ws = new Workspace();
 
+
+
+
     ws->containerWidget = new QWidget(mainWorkspaceTabWidget);
     ws->innerTabWidget = new QTabWidget(ws->containerWidget);
     ws->innerTabWidget->setStyleSheet(
@@ -231,7 +280,7 @@ void JSVariableReplacer::createWorkspace(int index, const QString& scriptContent
     QLabel *scriptLabel_editor = new QLabel("JavaScript Script (must return an object):", ws->scriptEditorTab);
     scriptEditorTabLayout->addWidget(scriptLabel_editor);
 
-    ws->scriptEditorTextEdit = new QTextEdit(ws->scriptEditorTab);
+    ws->scriptEditorTextEdit = new QsciScintilla(ws->scriptEditorTab);
     QString exampleScript = R"(// 定义返回结果的对象
 var scriptResult = {
     // --- 静态变量部分 ---
@@ -277,13 +326,20 @@ var scriptResult = {
 
 // 返回这个定义好的对象
 scriptResult;)";
-    ws->scriptEditorTextEdit->setPlainText(scriptContent.isEmpty() ? exampleScript : scriptContent);
+    ws->scriptEditorTextEdit->setText(scriptContent.isEmpty() ? exampleScript : scriptContent);
     QFont font("Monospace");
     font.setStyleHint(QFont::TypeWriter);
-    ws->scriptEditorTextEdit->setFont(font);
+//    ws->scriptEditorTextEdit->setFont(font);
+
+    QsciLexerJavaScript *jsLexer = new QsciLexerJavaScript(ws->scriptEditorTextEdit);
+    jsLexer->setFont(m_font(mfontContentSize));
+    ws->scriptEditorTextEdit->setLexer(jsLexer);
+    ws->scriptEditorTextEdit->setFont(m_font(mfontContentSize));
+    ws->scriptEditorTextEdit->setWrapMode(QsciScintilla::WrapCharacter);
+
     scriptEditorTabLayout->addWidget(ws->scriptEditorTextEdit);
     scriptEditorTabLayout->setStretch(1, 1);
-    connect(ws->scriptEditorTextEdit, &QTextEdit::textChanged, this, &JSVariableReplacer::onScriptChanged);
+    connect(ws->scriptEditorTextEdit, &QsciScintilla::textChanged, this, &JSVariableReplacer::onScriptChanged);
     ws->scriptEditorTab->setLayout(scriptEditorTabLayout);
 
     // --- Run & Template Tab ---
@@ -291,7 +347,13 @@ scriptResult;)";
     QLabel *templateLabel = new QLabel("Template Text (use {{key}} as placeholders):", ws->runTemplateTab);
     runTemplateTabLayout->addWidget(templateLabel);
 
-    ws->templateTextEdit = new QTextEdit(ws->runTemplateTab);
+    ws->templateTextEdit = new CodeEditor(ws->runTemplateTab);
+
+
+
+    ws->highlighter = new SqlHighlighter(ws->templateTextEdit->document());
+    connect(ws->templateTextEdit, &QPlainTextEdit::cursorPositionChanged, this, &JSVariableReplacer::onCursorChanged);
+
     QString exampleTemplate = R"(Application Name: {{appName}}
 Version: {{version}}
 Build Number (Static): {{buildNumber}}
@@ -306,10 +368,10 @@ Random Number 1: {{getRandomInt}}
 Random Number 2: {{getRandomInt}}
 Greeting: {{getGreeting}})";
     ws->templateTextEdit->setPlainText(templateContent.isEmpty() ? exampleTemplate : templateContent);
-    ws->templateTextEdit->setFont(font);
     runTemplateTabLayout->addWidget(ws->templateTextEdit);
     runTemplateTabLayout->setStretch(1, 1);
-    connect(ws->templateTextEdit, &QTextEdit::textChanged, this, &JSVariableReplacer::onTemplateChanged);
+    ws->templateTextEdit->setFont(m_font(mfontContentSize));
+    connect(ws->templateTextEdit, &CodeEditor::textChanged, this, &JSVariableReplacer::onTemplateChanged);
 
     ws->runButton = new QPushButton("Run Script & Replace", ws->runTemplateTab);
     connect(ws->runButton, &QPushButton::clicked, this, &JSVariableReplacer::runScriptAndReplace);
@@ -414,7 +476,7 @@ void JSVariableReplacer::saveAllWorkspacesToSettings()
         int index = it.key();
         Workspace *ws = it.value();
         if (ws && ws->scriptEditorTextEdit && ws->templateTextEdit) {
-            settings.setValue(SETTINGS_WORKSPACE_SCRIPT_KEY_PREFIX + QString::number(index), ws->scriptEditorTextEdit->toPlainText());
+            settings.setValue(SETTINGS_WORKSPACE_SCRIPT_KEY_PREFIX + QString::number(index), ws->scriptEditorTextEdit->text());
             settings.setValue(SETTINGS_WORKSPACE_TEMPLATE_KEY_PREFIX + QString::number(index), ws->templateTextEdit->toPlainText());
         }
     }
@@ -458,7 +520,7 @@ void JSVariableReplacer::runScriptAndReplace()
         return;
     }
 
-    QString script = currentWS->scriptEditorTextEdit->toPlainText();
+    QString script = currentWS->scriptEditorTextEdit->text();
     QString templateText = currentWS->templateTextEdit->toPlainText();
 
     if (script.isEmpty()) {
@@ -484,19 +546,46 @@ void JSVariableReplacer::runScriptAndReplace()
         return;
     }
 
-    // --- 核心修改：完全从 JS 返回的对象中获取静态和动态变量 ---
-    QMap<QString, QString> staticVariables; // 存储来自 result.vars 的静态值
+    // --- 核心修改：支持 vars 中的函数和 functions 中的函数 ---
+    QMap<QString, QString> staticVariables;    // 存储最终的静态值 (字符串)
     QMap<QString, QJSValue> callableVariables; // 存储来自 result.functions 的函数
 
     if (result.isObject()) {
-        // 1. 提取静态变量 (vars)
+        // 1. 提取并处理静态变量 (vars)
+        //    - 直接量存入 staticVariables
+        //    - 函数立即执行一次，结果存入 staticVariables
         QJSValue varsObject = result.property("vars");
         if (varsObject.isObject()) {
             QJSValueIterator varsIt(varsObject);
             while (varsIt.hasNext()) {
                 varsIt.next();
-                staticVariables.insert(varsIt.name(), varsIt.value().toString());
-                qDebug() << "[JS vars] Found static variable:" << varsIt.name() << "=" << varsIt.value().toString();
+                QString varName = varsIt.name();
+                QJSValue varValue = varsIt.value();
+
+                if (varValue.isCallable()) {
+                    // --- 关键点：如果 vars 中的值是函数，则立即调用 ---
+                    qDebug() << "[JS vars] Found callable in 'vars' for key:" << varName << ". Executing once to get static value.";
+                    QJSValue callResult = varValue.call(); // 立即调用
+                    if (callResult.isError()) {
+                        QString funcErrorMsg = QString("JS Function Error in 'vars.%1': %2\nLine: %3\nFile: %4")
+                                                   .arg(varName)
+                                                   .arg(callResult.toString())
+                                                   .arg(callResult.property("lineNumber").toInt())
+                                                   .arg(callResult.property("fileName").toString());
+                        qDebug() << funcErrorMsg;
+                        // 将错误信息作为该静态变量的值存储，或可以选择跳过
+                        staticVariables.insert(varName, "[Error calling vars." + varName + "]");
+                    } else {
+                        // 将函数调用的结果（转换为字符串）作为静态变量存储
+                        staticVariables.insert(varName, callResult.toString());
+                        qDebug() << "[JS vars] Stored result of 'vars." << varName << "' as static variable:" << callResult.toString();
+                        // 注意：如果需要保留复杂对象结构，这里需要更复杂的处理，例如 JSON.stringify
+                    }
+                } else {
+                    // 如果不是函数，直接作为静态值存储
+                    staticVariables.insert(varName, varValue.toString());
+                    qDebug() << "[JS vars] Found static variable:" << varName << "=" << varValue.toString();
+                }
             }
         } else if (!varsObject.isUndefined()) {
             QString errorMsg = "If present, 'vars' property in script result must be an object.";
@@ -506,16 +595,20 @@ void JSVariableReplacer::runScriptAndReplace()
         }
 
         // 2. 提取可调用函数 (functions)
+        //    - 只存储函数引用，供模板替换时调用
         QJSValue functionsObject = result.property("functions");
         if (functionsObject.isObject()) {
             QJSValueIterator funcsIt(functionsObject);
             while (funcsIt.hasNext()) {
                 funcsIt.next();
-                if (funcsIt.value().isCallable()) {
-                    callableVariables.insert(funcsIt.name(), funcsIt.value());
-                    qDebug() << "[JS functions] Found callable variable:" << funcsIt.name();
+                QString funcName = funcsIt.name();
+                QJSValue funcValue = funcsIt.value();
+
+                if (funcValue.isCallable()) {
+                    callableVariables.insert(funcName, funcValue);
+                    qDebug() << "[JS functions] Found callable variable:" << funcName;
                 } else {
-                    qDebug() << "Warning: Non-callable property '" << funcsIt.name() << "' found in 'functions' object, ignoring.";
+                    qDebug() << "Warning: Non-callable property '" << funcName << "' found in 'functions' object, ignoring.";
                 }
             }
         } else if (!functionsObject.isUndefined()) {
@@ -532,7 +625,7 @@ void JSVariableReplacer::runScriptAndReplace()
         return;
     }
 
-    // --- 3. 处理模板替换 (逻辑与之前类似，但只使用上面提取的 staticVariables 和 callableVariables) ---
+    // --- 3. 处理模板替换 ---
     QString outputText = templateText;
     QRegularExpression placeholderRegex(R"(\{\{([^}]+)\}\})");
     QRegularExpressionMatchIterator matchIterator = placeholderRegex.globalMatch(outputText);
@@ -547,19 +640,19 @@ void JSVariableReplacer::runScriptAndReplace()
         matchLengths.append(match.capturedLength());
     }
 
-    // 反向遍历进行替换
+    // 反向遍历进行替换，避免索引偏移
     for (int i = allMatches.size() - 1; i >= 0; --i) {
         QString placeholderName = allMatches[i];
         int start = matchStarts[i];
         int length = matchLengths[i];
         QString replacementValue;
 
-        // --- 4. 替换逻辑：优先调用函数，再查找静态变量 ---
-        // a. 首先检查是否是 JS 可调用函数
+        // --- 4. 替换逻辑：优先调用 functions 中的函数，再查找 vars 中的静态变量 ---
+        // a. 首先检查是否是 JS functions 中的可调用函数 (动态)
         auto callableIt = callableVariables.find(placeholderName);
         if (callableIt != callableVariables.end()) {
             QJSValue function = callableIt.value();
-            QJSValue functionResult = function.call(); // 调用时不传参数
+            QJSValue functionResult = function.call(); // 每次都调用
             if (functionResult.isError()) {
                 QString funcErrorMsg = QString("JS Function Error in '%1': %2\nLine: %3\nFile: %4")
                                            .arg(placeholderName)
@@ -573,7 +666,7 @@ void JSVariableReplacer::runScriptAndReplace()
                 qDebug() << "[Template Replace] Executed JS function" << placeholderName << "with result:" << replacementValue;
             }
         } else {
-            // b. 如果不是函数，检查 JS 静态变量
+            // b. 如果不是动态函数，检查 JS vars 中的静态变量
             auto staticIt = staticVariables.find(placeholderName);
             if (staticIt != staticVariables.end()) {
                 replacementValue = staticIt.value();
@@ -593,5 +686,65 @@ void JSVariableReplacer::runScriptAndReplace()
 }
 
 
+void JSVariableReplacer::onCursorChanged()
+{
+    Workspace *ws = getCurrentWorkspace(); // 获取当前 workspace
+    if (!ws || !ws->templateTextEdit || !ws->highlighter) { // 检查有效性
+        qDebug() << "onCursorChanged: Invalid workspace or components";
+        return;
+    }
+    QString sql = ws->templateTextEdit->toPlainText();
+    QTextCursor cursor = ws->templateTextEdit->textCursor();
+    int pos = cursor.position();
 
+    // 使用当前 workspace 的 highlighter
+    // ... (使用 ws->highlighter 替代原来的 highlighter) ...
+    QList<int> stmtStarts, stmtEnds;
+    int last = 0;
+    for (int i=0; i<sql.length(); ++i) {
+        if (sql[i] == ';') {
+            stmtStarts << last;
+            stmtEnds << i;
+            last = i+1;
+        }
+    }
 
+    int stmtIdx = -1;
+    for (int i=0; i<stmtStarts.size(); ++i) {
+        if (pos >= stmtStarts[i] && pos <= stmtEnds[i]) {
+            stmtIdx = i;
+            break;
+        }
+    }
+    if(stmtIdx == -1) {
+        ws->highlighter->clearHighlight(); // <-- 使用 ws->highlighter
+        return;
+    }
+
+    int stmtStart = stmtStarts[stmtIdx];
+    int stmtEnd = stmtEnds[stmtIdx];
+    QString stmt = sql.mid(stmtStart, stmtEnd-stmtStart+1);
+    QList<FieldValuePos> pairs = SqlParser::parseInsertWithPos(stmt);
+
+    for(auto &pair:pairs) {
+        pair.fieldStart += stmtStart;
+        pair.fieldEnd += stmtStart;
+        pair.valueStart += stmtStart;
+        pair.valueEnd += stmtStart;
+    }
+
+    bool found = false;
+    for (const auto &pair : pairs) {
+        if ((pair.fieldStart <= pos && pos <= pair.fieldEnd) ||
+            (pair.valueStart <= pos && pos <= pair.valueEnd)) {
+            QColor color = QColor::fromHsv(qHash(pair.field) % 360, 180, 230);
+            // 使用当前 workspace 的 highlighter
+            ws->highlighter->setHighlightRegion(pair.fieldStart, pair.fieldEnd, pair.valueStart, pair.valueEnd, color); // <-- 使用 ws->highlighter
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        ws->highlighter->clearHighlight(); // <-- 使用 ws->highlighter
+    }
+}

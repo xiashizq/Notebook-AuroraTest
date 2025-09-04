@@ -35,7 +35,7 @@ SqlParserWindow::SqlParserWindow(QWidget *parent) : QWidget(parent) {
     #else
         font = QFont();  // 其他平台也使用默认字体
     #endif
-    font.setPointSize(12);
+    font.setPointSize(11);
     textEdit->setFont(font);
 
     resize(900, 500);
