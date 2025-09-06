@@ -385,7 +385,7 @@ Greeting: {{getGreeting}})";
 
     ws->resultDisplayTextEdit = new QTextEdit(ws->resultTab);
     ws->resultDisplayTextEdit->setReadOnly(true);
-    ws->resultDisplayTextEdit->setFont(font);
+    ws->resultDisplayTextEdit->setFont(m_font(mfontContentSize));
     resultTabLayout->addWidget(ws->resultDisplayTextEdit);
     resultTabLayout->setStretch(1, 1);
     ws->resultTab->setLayout(resultTabLayout);

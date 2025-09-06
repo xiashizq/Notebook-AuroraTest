@@ -4,6 +4,7 @@
 #include <Qsci/qscilexerpython.h>
 #include <Qsci/qscilexercpp.h>
 #include <Qsci/qscilexerxml.h>
+#include <Qsci/qscilexersql.h>
 #include <Qsci/qscilexerjavascript.h>
 #include <Qsci/qscilexerjava.h>
 #include <Qsci/qsciapis.h>
@@ -34,6 +35,10 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QCheckBox>
+#include <QDockWidget>
+#include <QHeaderView>
+#include <QGroupBox>
+#include <QRadioButton>
 
 #pragma execution_character_set("utf-8")
 
@@ -73,86 +78,187 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
     central->setLayout(layout);
     setCentralWidget(central);
     resize(1200, 700);
-    // 菜单栏
-    QMenuBar *menuBar = this->menuBar();
-    QMenu *fileMenu = menuBar->addMenu("文件");
+    setupMenuBar();
+    setupToolBar();
 
-    // 添加“打开”菜单项
-    QAction *openAction = fileMenu->addAction("打开文件");
-    openAction->setShortcut(QKeySequence::Open);
-    connect(openAction, &QAction::triggered, this, &MainWindow::openFileNoPar);
+    restoreSession();
+    setupFindResultPanel();
 
-    QAction *newWindowAction = new QAction("新建SqlParser窗口", this);
-    fileMenu->addAction(newWindowAction);
-    connect(newWindowAction, &QAction::triggered, this, &MainWindow::openNewWindow);
+    m_totalMatchLines = 0;
+    m_totalMatchCount = 0;
+}
 
-    QAction *showJSVarReplacerAction = new QAction("新建JSParser窗口", this);
-    fileMenu->addAction(showJSVarReplacerAction);
-    connect(showJSVarReplacerAction, &QAction::triggered, this, &MainWindow::showJSVariableReplacerWindow);
+void MainWindow::setupMenuBar()
+{
+    // ================= 样式美化 =================
+    menuBar()->setStyleSheet(
+        "QMenuBar {"
+        "   background-color: #f8f9fa;"
+        "   border-bottom: 1px solid #dcdcdc;"
+        "}"
+        "QMenuBar::item {"
+        "   padding: 4px 12px;"
+        "   background: transparent;"
+        "   color: #333;"
+        "}"
+        "QMenuBar::item:selected {"
+        "   background: #e7f1ff;"
+        "   color: #0078d7;"
+        "   border-radius: 4px;"
+        "}"
+        "QMenu {"
+        "   background-color: #ffffff;"
+        "   border: 1px solid #dcdcdc;"
+        "   font-size: 13px;"
+        "}"
+        "QMenu::item {"
+        "   padding: 4px 20px;"
+        "}"
+        "QMenu::item:selected {"
+        "   background: #0078d7;"
+        "   color: white;"
+        "}"
+    );
 
+    // ================= 文件菜单 =================
+    QMenu *fileMenu = menuBar()->addMenu("文件(&F)");
+    fileMenu->addAction("打开文件", this, &MainWindow::openFileNoPar, QKeySequence::Open);
+//    fileMenu->addAction("保存", this, &MainWindow::onSave, QKeySequence::Save);
+//    fileMenu->addAction("另存为", this, &MainWindow::onSaveAs, QKeySequence::SaveAs);
+    fileMenu->addSeparator();
+    fileMenu->addAction("新建SqlParser窗口", this, &MainWindow::openNewWindow);
+    fileMenu->addAction("新建JSParser窗口", this, &MainWindow::showJSVariableReplacerWindow);
+    fileMenu->addSeparator();
+    fileMenu->addAction("退出(&Q)", this, &QWidget::close, QKeySequence::Quit);
 
-    QMenu *beautifyMenu = menuBar->addMenu("美化");
-    QAction *jsonBTYAction = new QAction("JSON美化", this);
-    QAction *xmlBTYAction = new QAction("XML美化", this);
-    beautifyMenu->addAction(jsonBTYAction);
-    beautifyMenu->addAction(xmlBTYAction);
-    connect(jsonBTYAction, &QAction::triggered, this, &MainWindow::formatJson);
-    connect(xmlBTYAction, &QAction::triggered, this, &MainWindow::formatXml);
+    // ================= 编辑菜单 =================
+    createEditMenu();
 
+    // ================= 美化菜单 =================
+    QMenu *beautifyMenu = menuBar()->addMenu("美化(&B)");
+    beautifyMenu->addAction("JSON美化", this, &MainWindow::formatJson);
+    beautifyMenu->addAction("XML美化", this, &MainWindow::formatXml);
 
-    QMenu *codeHightLight = menuBar->addMenu("代码高亮");
-    QAction *pythonHlAction = new QAction("Python", this);
-    QAction *jsonHlAction = new QAction("JSON", this);
-    QAction *cppHlAction = new QAction("C++", this);
-    QAction *javaHlAction = new QAction("Java", this);
-    QAction *javascriptHlAction = new QAction("JavaScript", this);
-    QAction *xmlHlAction = new QAction("XML", this);
-    QAction *clearHlAction = new QAction("清除高亮", this);
-    codeHightLight->addAction(pythonHlAction);
-    codeHightLight->addAction(jsonHlAction);
-    codeHightLight->addAction(cppHlAction);
-    codeHightLight->addAction(javaHlAction);
-    codeHightLight->addAction(javascriptHlAction);
-    codeHightLight->addAction(xmlHlAction);
-    codeHightLight->addAction(clearHlAction);
+    // ================= 代码高亮 =================
+    QMenu *hlMenu = menuBar()->addMenu("代码高亮(&H)");
+    hlMenu->addAction("Python", this, [this]() { codeHightLightFunction("Python"); });
+    hlMenu->addAction("JSON", this, [this]() { codeHightLightFunction("JSON"); });
+    hlMenu->addAction("C++", this, [this]() { codeHightLightFunction("CPP"); });
+    hlMenu->addAction("Java", this, [this]() { codeHightLightFunction("Java"); });
+    hlMenu->addAction("JavaScript", this, [this]() { codeHightLightFunction("JavaScript"); });
+    hlMenu->addAction("XML", this, [this]() { codeHightLightFunction("XML"); });
+    hlMenu->addAction("SQL", this, [this]() { codeHightLightFunction("SQL"); });
+    hlMenu->addSeparator();
+    hlMenu->addAction("清除高亮", this, [this]() { codeHightLightFunction(""); });
 
-    connect(pythonHlAction, &QAction::triggered, this, [this]() {
-        codeHightLightFunction("Python");
+    // ================= 对比工具 =================
+    QMenu *diffMenu = menuBar()->addMenu("对比工具(&T)");
+    diffMenu->addAction("文件夹对比", this, &MainWindow::onOpenFolderCompareTool);
+    diffMenu->addAction("行级对比", this, &MainWindow::openDiffWidget);
+    // 添加“最近打开”菜单
+    setupRecentFilesMenu(); // 之前定义的函数
+    // ================= 帮助菜单 =================
+    QMenu *helpMenu = menuBar()->addMenu("帮助(&H)");
+    helpMenu->addAction("关于", this, [this]() {
+        QMessageBox::about(this, "关于 Notebook-AuroraTest",
+                           "Notebook-AuroraTest\n\n"
+                           "一个支持 JSON/XML 美化、代码高亮、文件对比的开源项目，工具系列AuroraTest的分支。");
     });
-    connect(jsonHlAction, &QAction::triggered, this, [this]() {
-        codeHightLightFunction("JSON");
-    });
-    connect(cppHlAction, &QAction::triggered, this, [this]() {
-        codeHightLightFunction("CPP");
-    });
-    connect(javaHlAction, &QAction::triggered, this, [this]() {
-        codeHightLightFunction("Java");
-    });
-    connect(javascriptHlAction, &QAction::triggered, this, [this]() {
-        codeHightLightFunction("JavaScript");
-    });
-    connect(xmlHlAction, &QAction::triggered, this, [this]() {
-        codeHightLightFunction("XML");
-    });
-    connect(clearHlAction, &QAction::triggered, this, [this]() {
-        codeHightLightFunction("");
-    });
 
 
-    QMenu *diffMenu = menuBar->addMenu("对比工具");
-    QAction *folderDiffHJAction = new QAction("文件夹对比", this);
-    QAction *diffHJAction = new QAction("行级对比", this);
-    diffMenu->addAction(folderDiffHJAction);
-    diffMenu->addAction(diffHJAction);
-    connect(diffHJAction, &QAction::triggered, this, &MainWindow::openDiffWidget);
-    connect(folderDiffHJAction, &QAction::triggered, this, &MainWindow::onOpenFolderCompareTool);
+//    QAction *saveAct = new QAction(this);
+//    saveAct->setShortcut(QKeySequence::Save);
+//    connect(saveAct, &QAction::triggered, this, &MainWindow::onSave);
+//    this->addAction(saveAct); // 添加到窗口，否则快捷键不生效
+
+//    QAction *saveAsAct = new QAction(this);
+//    saveAsAct->setShortcut(QKeySequence::SaveAs);
+//    connect(saveAsAct, &QAction::triggered, this, &MainWindow::onSaveAs);
+//    this->addAction(saveAsAct);
+//    // Ctrl+F 打开搜索
+//    QAction *findAction = new QAction(this);
+//    findAction->setShortcut(QKeySequence::Find);
+//    connect(findAction, &QAction::triggered, this, &MainWindow::openFindReplaceDialog);
+//    this->addAction(findAction); // 添加到窗口
+}
+
+
+void MainWindow::createEditMenu() {
+    QMenu *editMenu = menuBar()->addMenu(tr("编辑(&E)"));
+
+    // 撤销
+    QAction *undoAct = editMenu->addAction(tr("撤销(&U)"));
+    undoAct->setShortcut(QKeySequence::Undo);
+    connect(undoAct, &QAction::triggered, this, [this]() {
+        if (auto *editor = getCurrentEditor()) {
+            editor->undo();
+        }
+    });
+
+    // 重做
+    QAction *redoAct = editMenu->addAction(tr("重做(&R)"));
+    redoAct->setShortcut(QKeySequence::Redo);
+    connect(redoAct, &QAction::triggered, this, [this]() {
+        if (auto *editor = getCurrentEditor()) {
+            editor->redo();
+        }
+    });
+
+    editMenu->addSeparator();
+
+    // 剪切
+    QAction *cutAct = editMenu->addAction(tr("剪切(&T)"));
+    cutAct->setShortcut(QKeySequence::Cut);
+    connect(cutAct, &QAction::triggered, this, [this]() {
+        if (auto *editor = getCurrentEditor()) {
+            editor->cut();
+        }
+    });
+
+    // 复制
+    QAction *copyAct = editMenu->addAction(tr("复制(&C)"));
+    copyAct->setShortcut(QKeySequence::Copy);
+    connect(copyAct, &QAction::triggered, this, [this]() {
+        if (auto *editor = getCurrentEditor()) {
+            editor->copy();
+        }
+    });
+
+    // 粘贴
+    QAction *pasteAct = editMenu->addAction(tr("粘贴(&P)"));
+    pasteAct->setShortcut(QKeySequence::Paste);
+    connect(pasteAct, &QAction::triggered, this, [this]() {
+        if (auto *editor = getCurrentEditor()) {
+            editor->paste();
+        }
+    });
+
+    editMenu->addSeparator();
+
+    // 全选
+    QAction *selectAllAct = editMenu->addAction(tr("全选(&A)"));
+    selectAllAct->setShortcut(QKeySequence::SelectAll);
+    connect(selectAllAct, &QAction::triggered, this, [this]() {
+        if (auto *editor = getCurrentEditor()) {
+            editor->selectAll();
+        }
+    });
+
+    editMenu->addSeparator();
+
+    // 查找
+    QAction *findAct = editMenu->addAction(tr("查找(&F)..."));
+    findAct->setShortcut(QKeySequence::Find);
+    connect(findAct, &QAction::triggered, this, &MainWindow::openFindReplaceDialog);
+}
 
 
 
+void MainWindow::setupToolBar()
+{
     // 创建工具栏
     QToolBar *mainToolBar = new QToolBar("主工具栏", this);
-
-    mainToolBar->setToolButtonStyle(Qt::ToolButtonIconOnly); // 图标在上，文字在下
+    mainToolBar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon); // 图标在上，文字在下
     mainToolBar->setIconSize(QSize(20, 20)); // 设置图标大小
 
     // 新增
@@ -171,8 +277,6 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
     connect(saveAsAction, &QAction::triggered, this, &MainWindow::onSaveAs);
     mainToolBar->addAction(saveAsAction);
 
-
-
     // 可以添加更多图标，比如“自动保存”开关
 //    QAction *autoSaveAction = new QAction(QIcon(":/auto_save.png"), "自动保存", this);
 //    autoSaveAction->setCheckable(true);
@@ -185,9 +289,6 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
 //    });
 //    mainToolBar->addAction(autoSaveAction);
 
-    // 将工具栏添加到主窗口（会自动显示在菜单栏下方）
-
-    // 设置浅白色背景 + 更紧凑的样式
     mainToolBar->setStyleSheet(
         "QToolBar {"
         "   background-color: #f8f8f8;"
@@ -209,36 +310,10 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
         "   background: #d0d0d0;"
         "}"
     );
-
     addToolBar(mainToolBar);
 
-
-
-
-
-
-
-    // 添加“最近打开”菜单
-    setupRecentFilesMenu(); // 之前定义的函数
-
-    QAction *saveAct = new QAction(this);
-    saveAct->setShortcut(QKeySequence::Save);
-    connect(saveAct, &QAction::triggered, this, &MainWindow::onSave);
-    this->addAction(saveAct); // 添加到窗口，否则快捷键不生效
-
-    QAction *saveAsAct = new QAction(this);
-    saveAsAct->setShortcut(QKeySequence::SaveAs);
-    connect(saveAsAct, &QAction::triggered, this, &MainWindow::onSaveAs);
-    this->addAction(saveAsAct);
-
-    // Ctrl+F 打开搜索
-    QAction *findAction = new QAction(this);
-    findAction->setShortcut(QKeySequence::Find);
-    connect(findAction, &QAction::triggered, this, &MainWindow::openFindReplaceDialog);
-    this->addAction(findAction); // 添加到窗口
-
-    restoreSession();
 }
+
 
 void MainWindow::openNewWindow() {
     SqlParserWindow* sqlParserWindow = new SqlParserWindow();
@@ -267,11 +342,11 @@ QsciScintilla* MainWindow::getCurrentEditor()
 
 void MainWindow::setLexerForLanguage(QsciScintilla *editor, const QString &language)
 {
-//    QSettings settings("AuroraTestTech", "Notebook-AuroraTest");
-//    QFont font = settings.value("editor/font", QFont("Consolas", 12)).value<QFont>();
+    // 删除旧的 lexer
     delete editor->lexer();
+
     QsciLexer *lexer = nullptr;
-    // 设置所有样式的字体
+
     if (language == "Python") {
         lexer = new QsciLexerPython(editor);
     } else if (language == "CPP") {
@@ -279,10 +354,14 @@ void MainWindow::setLexerForLanguage(QsciScintilla *editor, const QString &langu
     } else if (language == "Java") {
         lexer = new QsciLexerJava(editor);
     } else if (language == "JSON" || language == "JavaScript") {
-        QsciLexerJavaScript *jsLexer = new QsciLexerJavaScript(editor);
-        lexer = jsLexer;
+        lexer = new QsciLexerJavaScript(editor);
     } else if (language == "XML") {
         lexer = new QsciLexerXML(editor);
+    } else if (language == "SQL") {  // 👈 新增 SQL 支持
+        QsciLexerSQL *sqlLexer = new QsciLexerSQL(editor);
+        // 可选：设置数据库类型（如 SQLite, MySQL, PostgreSQL 等）
+        // sqlLexer->setDatabase(QsciLexerSQL::MySQL);
+        lexer = sqlLexer;
     } else if (language == "None" || language.isEmpty()) {
         // 无高亮模式
         editor->setLexer(nullptr);
@@ -290,13 +369,44 @@ void MainWindow::setLexerForLanguage(QsciScintilla *editor, const QString &langu
         editor->setPaper(Qt::white);
         editor->setFont(m_font(mfontContentSize));
         editor->SendScintilla(QsciScintilla::SCI_STYLECLEARALL);
+
+        editor->setAutoCompletionSource(QsciScintilla::AcsNone);
+        editor->setAutoCompletionThreshold(0);
         return;
     } else {
         editor->setLexer(nullptr);
+        editor->setFont(m_font(mfontContentSize));
+        editor->SendScintilla(QsciScintilla::SCI_STYLECLEARALL);
+
+        editor->setAutoCompletionSource(QsciScintilla::AcsNone);
+        editor->setAutoCompletionThreshold(0);
         return;
     }
     lexer->setFont(m_font(mfontContentSize));
+
     editor->setLexer(lexer);
+
+//    editor->setAutoCompletionSource(QsciScintilla::AcsAll);        // 来源：所有
+//    editor->setAutoCompletionThreshold(2);                         // 输入2个字符开始提示
+//    editor->setAutoCompletionCaseSensitivity(false);               // 不区分大小写
+//    editor->setAutoCompletionReplaceWord(true);                    // 补全时替换前面的词（推荐）
+//    editor->setAutoCompletionShowSingle(false);                    // 即使只有一个选项也不自动弹出（可选）
+
+//    editor->setBraceMatching(QsciScintilla::StrictBraceMatch);
+//    editor->setMatchedBraceBackgroundColor(Qt::lightGray);
+//    editor->setUnmatchedBraceBackgroundColor(Qt::red);
+//    editor->setUnmatchedBraceForegroundColor(Qt::white);
+
+//    editor->setFolding(QsciScintilla::PlainFoldStyle);
+
+
+    // ===== 智能缩进与对齐 =====
+    editor->setAutoIndent(true);                    // 启用自动缩进
+    editor->setTabIndents(true);
+    editor->setBackspaceUnindents(true);
+    editor->setIndentationsUseTabs(false);
+    editor->setIndentationWidth(4);                // 可根据语言动态设置
+
 }
 
 bool MainWindow::formatJson()
@@ -399,7 +509,7 @@ void MainWindow::addNewTab(const QString &filePath)
     editor->setWrapMode(QsciScintilla::WrapCharacter);
 
     editor->setCaretLineVisible(true); //是否高亮显示光标所在行
-    editor->setCaretLineBackgroundColor(QColor("#eeeeee"));//光标所在行背景颜色
+    editor->setCaretLineBackgroundColor(QColor("#BBFFFF"));//光标所在行背景颜色
 
     // 更新行号宽度
     updateLineNumberWidth(editor);
@@ -1108,90 +1218,172 @@ void MainWindow::openFindReplaceDialog()
 {
     QsciScintilla *editor = getCurrentEditor();
     if (!editor) return;
+
     // 如果已打开，就激活
     if (m_findReplaceDialog) {
         m_findReplaceDialog->raise();
         m_findReplaceDialog->activateWindow();
         return;
     }
+
     m_findReplaceDialog = new QDialog(this);
     m_findReplaceDialog->setWindowTitle("查找和替换");
-    m_findReplaceDialog->resize(320, 160);
+    m_findReplaceDialog->resize(360, 180);
     m_findReplaceDialog->setAttribute(Qt::WA_DeleteOnClose);
     m_findReplaceDialog->setWindowFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+
+    // 防止重复连接 finished 信号
+    disconnect(m_findReplaceDialog, &QDialog::finished, nullptr, nullptr);
     connect(m_findReplaceDialog, &QDialog::finished, this, [this]() {
         m_findReplaceDialog = nullptr;
-        m_findStarted = false; // 关闭时重置状态
+        m_findStarted = false;
     });
-    // === UI 控件 ===
+
+    // === 控件声明 ===
     auto *findEdit = new QLineEdit(m_findReplaceDialog);
     auto *replaceEdit = new QLineEdit(m_findReplaceDialog);
+
     auto *caseCheck = new QCheckBox("区分大小写", m_findReplaceDialog);
     auto *wrapCheck = new QCheckBox("循环查找", m_findReplaceDialog);
     wrapCheck->setChecked(true);
     auto *regexCheck = new QCheckBox("正则表达式", m_findReplaceDialog);
     regexCheck->setToolTip("启用后，\\n \\t ^ $ . * + 等作为正则语法");
-    auto *findButton = new QPushButton("查找下一个", m_findReplaceDialog);
-    auto *replaceButton = new QPushButton("替换", m_findReplaceDialog);
-    auto *replaceAllButton = new QPushButton("全部替换", m_findReplaceDialog);
-    auto *closeButton = new QPushButton("关闭", m_findReplaceDialog);
-    // 布局
-    auto *topLayout = new QGridLayout;
-    topLayout->addWidget(new QLabel("查找："), 0, 0);
-    topLayout->addWidget(findEdit, 0, 1);
-    topLayout->addWidget(new QLabel("替换为："), 1, 0);
-    topLayout->addWidget(replaceEdit, 1, 1);
-    topLayout->addWidget(caseCheck, 2, 0);
-    topLayout->addWidget(wrapCheck, 2, 1);
-    topLayout->addWidget(regexCheck, 3, 0, 1, 2);
-    auto *buttonLayout = new QHBoxLayout;
+
+    // 查找范围单选按钮
+    auto *scopeLabel = new QLabel("查找范围：");
+    auto *currentFileRadio = new QRadioButton("当前文件", m_findReplaceDialog);
+    auto *allFilesRadio = new QRadioButton("所有文件", m_findReplaceDialog);
+    currentFileRadio->setChecked(true); // 默认选中当前文件
+
+    auto *findButton = new QPushButton("查找下一个");
+    auto *findAllButton = new QPushButton("查找全部");
+    auto *replaceButton = new QPushButton("替换");
+    auto *replaceAllButton = new QPushButton("全部替换");
+    auto *closeButton = new QPushButton("关闭");
+
+    // === 布局设置 ===
+    auto *mainLayout = new QVBoxLayout(m_findReplaceDialog);
+
+    // 上部输入区
+    auto *inputGroup = new QGroupBox("查找与替换");
+    auto *inputLayout = new QGridLayout();
+    inputLayout->addWidget(new QLabel("查找："), 0, 0);
+    inputLayout->addWidget(findEdit, 0, 1);
+    inputLayout->addWidget(new QLabel("替换为："), 1, 0);
+    inputLayout->addWidget(replaceEdit, 1, 1);
+    inputLayout->addWidget(caseCheck, 2, 0);
+    inputLayout->addWidget(wrapCheck, 2, 1);
+    inputLayout->addWidget(regexCheck, 3, 0, 1, 2);
+    inputLayout->addWidget(scopeLabel, 4, 0);
+    inputLayout->addWidget(currentFileRadio, 4, 1);
+    inputLayout->addWidget(allFilesRadio, 5, 1);
+    inputGroup->setLayout(inputLayout);
+
+    // 按钮区（右对齐）
+    auto *buttonLayout = new QHBoxLayout();
+    buttonLayout->addStretch();
     buttonLayout->addWidget(findButton);
+    buttonLayout->addWidget(findAllButton);
     buttonLayout->addWidget(replaceButton);
     buttonLayout->addWidget(replaceAllButton);
     buttonLayout->addWidget(closeButton);
-    auto *mainLayout = new QVBoxLayout(m_findReplaceDialog);
-    mainLayout->addLayout(topLayout);
+
+    mainLayout->addWidget(inputGroup);
     mainLayout->addLayout(buttonLayout);
-    // === 功能实现（同上）===
+
+
+
+    // === 新增：动态控制 “查找下一个” 按钮可用性 ===
+    auto updateFindNextButton = [=]() {
+        bool enable = currentFileRadio->isChecked();
+        findButton->setEnabled(enable);
+        if (!enable) {
+            findButton->setToolTip("“查找下一个”仅适用于当前文件查找模式");
+        } else {
+            findButton->setToolTip("");
+        }
+    };
+    // 初始化按钮状态
+    updateFindNextButton();
+    // 当单选按钮切换时更新按钮状态
+    QObject::connect(currentFileRadio, &QRadioButton::toggled, updateFindNextButton);
+    QObject::connect(allFilesRadio, &QRadioButton::toggled, updateFindNextButton);
+    QObject::connect(currentFileRadio, &QRadioButton::toggled, [=](bool checked) {
+        bool enable = checked;
+        replaceButton->setEnabled(enable);
+        replaceAllButton->setEnabled(enable);
+        replaceButton->setToolTip(enable ? "" : "替换操作仅支持当前文件");
+        replaceAllButton->setToolTip(enable ? "" : "替换操作仅支持当前文件");
+    });
+
+
+    // === 功能逻辑 ===
+    // 工具函数：处理转义字符
+    auto unescapeForSearch = [this](const QString &text, bool useRegex) -> QString {
+        return useRegex ? text : unescapeString(text);
+    };
+
+    // 查找下一个
     QObject::connect(findButton, &QPushButton::clicked, [=]() {
         QsciScintilla *currentEditor = getCurrentEditor();
         if (!currentEditor) {
             QMessageBox::warning(m_findReplaceDialog, "错误", "当前没有打开的编辑器。");
             return;
         }
-        m_findStarted = false; // 重置“替换”状态，确保从当前光标开始
         QString findText = findEdit->text();
         if (findText.isEmpty()) return;
         bool useRegex = regexCheck->isChecked();
         bool cs = caseCheck->isChecked();
-        // 正则模式：用原始字符串；普通模式：解析 \n \t
-        QString textToFind = useRegex ? findText : unescapeString(findText);
-        bool found = editor->findFirst(
-            textToFind,           // 查找内容
-            false,                // 向前查找
-            cs,                   // 区分大小写
-            useRegex,             // 是否正则
-            true,                 // wholeWord: 可加 checkbox 控制
-            true,                 // 允许空搜索
-            -1, -1,               // 从当前光标开始
-            wrapCheck->isChecked() // 循环查找
+        QString textToFind = unescapeForSearch(findText, useRegex);
+        m_findStarted = false; // 重置替换状态
+        bool found = currentEditor->findFirst(
+            textToFind,
+            false,                    // 向前查找
+            cs,                       // 区分大小写
+            useRegex,                 // 正则表达式
+            true,                     // wholeWord（可后续扩展为选项）
+            true,                     // 允许空搜索
+            -1, -1,                   // 从当前位置开始
+            wrapCheck->isChecked()    // 循环查找
         );
         if (!found) {
             QMessageBox::information(m_findReplaceDialog, "查找", "未找到 \"" + findText + "\"");
         }
     });
-    QObject::connect(replaceButton, &QPushButton::clicked, [=]() {
+
+    // 查找全部
+QObject::connect(findAllButton, &QPushButton::clicked, [=]() {
         QsciScintilla *currentEditor = getCurrentEditor();
         if (!currentEditor) {
             QMessageBox::warning(m_findReplaceDialog, "错误", "当前没有打开的编辑器。");
             return;
         }
+
         QString findText = findEdit->text();
         if (findText.isEmpty()) return;
+
+        if (allFilesRadio->isChecked()) {
+            findInAllDocuments(findText, true); // 假设你已有此函数处理多文件
+        } else {
+            findInAllDocuments(findText, false);
+        }
+    });
+
+    // 替换单个
+    QObject::connect(replaceButton, &QPushButton::clicked, [=]()  {
+        QsciScintilla *currentEditor = getCurrentEditor();
+        if (!currentEditor) {
+            QMessageBox::warning(m_findReplaceDialog, "错误", "当前没有打开的编辑器。");
+            return;
+        }
+
+        QString findText = findEdit->text();
+        if (findText.isEmpty()) return;
+
         bool useRegex = regexCheck->isChecked();
         bool cs = caseCheck->isChecked();
-        QString textToFind = useRegex ? findText : unescapeString(findText);
-        // 第一次点击：启动查找
+        QString textToFind = unescapeForSearch(findText, useRegex);
+
         if (!m_findStarted) {
             m_findStarted = true;
             bool found = currentEditor->findFirst(
@@ -1203,17 +1395,17 @@ void MainWindow::openFindReplaceDialog()
             }
             return;
         }
-        // 已有匹配，执行替换
+
         if (currentEditor->hasSelectedText()) {
             QString selected = currentEditor->selectedText();
-            bool matches = useRegex ? true : // 正则模式下 assume 匹配
+            bool matches = useRegex ||
                           (cs ? selected == textToFind : selected.toLower() == textToFind.toLower());
             if (matches) {
                 QString replaceText = unescapeString(replaceEdit->text());
                 currentEditor->replaceSelectedText(replaceText);
             }
         }
-        // 查找下一个
+
         bool found = currentEditor->findNext();
         if (!found) {
             QMessageBox::information(m_findReplaceDialog, "替换", "已到末尾，未找到更多匹配项。");
@@ -1221,19 +1413,22 @@ void MainWindow::openFindReplaceDialog()
         }
     });
 
+    // 全部替换（仅当前文件）
     QObject::connect(replaceAllButton, &QPushButton::clicked, [=]() {
         QsciScintilla *currentEditor = getCurrentEditor();
         if (!currentEditor) return;
+
         QString findText = findEdit->text();
         if (findText.isEmpty()) return;
+
         QString replaceTextStr = replaceEdit->text();
         bool useRegex = regexCheck->isChecked();
         bool cs = caseCheck->isChecked();
         QString text = currentEditor->text();
         int count = 0;
         QString result;
+
         if (useRegex) {
-            // 正则模式
             QString literalPattern = unescapeString(findText);
             QRegularExpression::PatternOptions options = cs ?
                         QRegularExpression::NoPatternOption :
@@ -1243,35 +1438,23 @@ void MainWindow::openFindReplaceDialog()
                 QMessageBox::warning(m_findReplaceDialog, "正则错误", "正则表达式无效：" + regex.errorString());
                 return;
             }
-            // 统计匹配次数
             QRegularExpressionMatchIterator it = regex.globalMatch(text);
             count = 0;
-            while (it.hasNext()) {
-                it.next();
-                count++;
-            }
-            // 执行替换
+            while (it.hasNext()) { it.next(); count++; }
             result = text.replace(regex, unescapeString(replaceTextStr));
         } else {
-            // 普通模式：支持 \n \t 的全局替换（修复版）
-            QString searchText = unescapeString(findText);
+            QString searchText = unescapeForSearch(findText, false);
             QString replaceText = unescapeString(replaceTextStr);
-            if (searchText.isEmpty()) {
-                count = 0;
-                result = text;
-            } else {
-                result = text;
-                int pos = 0;
-                count = 0;
-                Qt::CaseSensitivity csOption = cs ? Qt::CaseSensitive : Qt::CaseInsensitive;
-                while ((pos = result.indexOf(searchText, pos, csOption)) != -1) {
-                    result.replace(pos, searchText.length(), replaceText);
-                    pos += replaceText.length();
-                    count++;
-                }
+            result = text;
+            int pos = 0;
+            Qt::CaseSensitivity csOption = cs ? Qt::CaseSensitive : Qt::CaseInsensitive;
+            while ((pos = result.indexOf(searchText, pos, csOption)) != -1) {
+                result.replace(pos, searchText.length(), replaceText);
+                pos += replaceText.length();
+                count++;
             }
         }
-        // 一次性写回
+
         if (count > 0) {
             currentEditor->beginUndoAction();
             currentEditor->selectAll();
@@ -1282,17 +1465,16 @@ void MainWindow::openFindReplaceDialog()
             QMessageBox::information(m_findReplaceDialog, "全部替换", "未找到匹配项。");
         }
     });
-    // 关闭按钮
+
+    // 关闭
     QObject::connect(closeButton, &QPushButton::clicked, m_findReplaceDialog, &QDialog::accept);
-    connect(m_findReplaceDialog, &QDialog::finished, this, [this]() {
-        m_findReplaceDialog = nullptr;
-        m_findStarted = false; // 重置状态
-    });
-    // 回车 = 查找
+
+    // 回车触发查找
     QObject::connect(findEdit, &QLineEdit::returnPressed, findButton, &QPushButton::click);
-    // 显示为非模态窗口
+
+    // 显示
     m_findReplaceDialog->show();
-    findEdit->setFocus(); // 聚焦搜索框
+    findEdit->setFocus();
 }
 
 
@@ -1370,3 +1552,152 @@ void MainWindow::showJSVariableReplacerWindow()
     jsVarReplacerWindow->activateWindow();
 }
 
+void MainWindow::setupFindResultPanel()
+{
+    QString title = tr("查找结果 (共 %1 行, %2 处匹配)")
+                        .arg(m_totalMatchLines)
+                        .arg(m_totalMatchCount);
+    m_findResultDock = new QDockWidget(title, this);
+    m_findResultDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable);
+    m_findResultDock->setAllowedAreas(Qt::BottomDockWidgetArea);
+
+    m_findResultTree = new QTreeWidget;
+    m_findResultTree->setHeaderLabels(QStringList() << tr("文件") << tr("行") << tr("内容"));
+
+    // 禁止编辑
+    m_findResultTree->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    // 单行选择
+    m_findResultTree->setSelectionBehavior(QAbstractItemView::SelectRows);
+
+    // 列宽调整
+    m_findResultTree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    m_findResultTree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    m_findResultTree->header()->setStretchLastSection(true);
+
+    // 可选：设置默认字体或样式，避免对齐异常
+    // m_findResultTree->setStyleSheet("QTreeWidget::item { padding: 2px; }");
+
+    connect(m_findResultTree, &QTreeWidget::itemClicked,
+            this, &MainWindow::onFindResultItemClicked);
+
+    m_findResultDock->setWidget(m_findResultTree);
+    m_findResultDock->hide();
+    addDockWidget(Qt::BottomDockWidgetArea, m_findResultDock);
+}
+
+void MainWindow::onFindResultItemClicked(QTreeWidgetItem *item, int column)
+{
+    Q_UNUSED(column)
+
+    int tabIndex = item->data(0, Qt::UserRole).toInt(); // tab 索引
+    int line = item->data(1, Qt::UserRole).toInt();     // 行号（0-based）
+
+    if (tabIndex >= m_tabWidget->count()) {
+        QMessageBox::warning(this, tr("错误"), tr("无效的标签页索引。"));
+        return;
+    }
+
+    // 切换到目标标签页
+    m_tabWidget->setCurrentIndex(tabIndex);
+    QsciScintilla *editor = qobject_cast<QsciScintilla*>(m_tabWidget->widget(tabIndex));
+
+    if (!editor) return;
+
+    //2. 设置光标
+    editor->setCursorPosition(line, 0);
+    editor->ensureLineVisible(line);
+    editor->setFocus();
+}
+
+void MainWindow::findInAllDocuments(const QString &text, bool findAll)
+{
+    if (text.isEmpty()) {
+        QMessageBox::warning(this, tr("查找"), tr("查找内容不能为空。"));
+        return;
+    }
+    // 清空上一次结果
+    m_findResultTree->clear();
+    m_totalMatchLines = 0;
+    m_totalMatchCount = 0;
+    updateFindResultTitle(); // 此时标题变为：查找结果 (共 0 行, 0 处匹配)
+    bool foundAny = false;
+    // 确定要搜索的 tab 索引列表
+    QList<int> tabIndices;
+    if (findAll) {
+        // 查找所有标签页
+        for (int i = 0; i < m_tabWidget->count(); ++i) {
+            tabIndices.append(i);
+        }
+    } else {
+        // 只查找当前标签页
+        int currentIndex = m_tabWidget->currentIndex();
+        if (currentIndex >= 0) {
+            tabIndices.append(currentIndex);
+        }
+    }
+
+    // 遍历目标标签页
+    for (int tabIndex : tabIndices) {
+        QsciScintilla *editor = qobject_cast<QsciScintilla*>(m_tabWidget->widget(tabIndex));
+        if (!editor) {
+            qDebug() << "Tab" << tabIndex << "is not a QsciScintilla";
+            continue;
+        }
+
+        // 获取文件名（去掉末尾的 *）
+        QString fileName = m_tabWidget->tabText(tabIndex);
+        if (fileName.endsWith("*")) {
+            fileName.chop(1);
+        }
+
+        // 逐行查找
+        int lineCount = editor->lines();
+        for (int line = 0; line < lineCount; ++line) {
+            QString lineText = editor->text(line);
+
+            int pos = 0;
+            int matchCountInThisLine = 0;
+
+            while (pos <= lineText.length()) {
+                int foundPos = lineText.indexOf(text, pos, Qt::CaseInsensitive);
+                if (foundPos == -1) break;
+                matchCountInThisLine++;
+                pos = foundPos + 1; // 允许重叠，如 "aaaa" 查 "aa" 找到3次
+                // 若不允许重叠：pos = foundPos + text.length();
+            }
+
+            if (matchCountInThisLine > 0) {
+                QTreeWidgetItem *item = new QTreeWidgetItem(m_findResultTree);
+                item->setText(0, fileName);
+                item->setText(1, QString::number(line + 1));
+                item->setText(2, lineText.trimmed());
+                item->setData(0, Qt::UserRole, tabIndex);
+                item->setData(1, Qt::UserRole, line);
+
+                foundAny = true;
+
+                m_totalMatchLines++;
+                m_totalMatchCount += matchCountInThisLine; //正确累加
+            }
+        }
+
+        // 查找全部结束后，统一刷新标题（高效）
+        updateFindResultTitle();
+    }
+
+    if (foundAny) {
+        m_findResultDock->show();
+        m_findResultDock->raise();
+    } else {
+        QMessageBox::information(this, tr("查找结果"),
+            findAll ? tr("在所有文件中未找到匹配内容。") : tr("在当前文件中未找到匹配内容。"));
+    }
+}
+
+void MainWindow::updateFindResultTitle()
+{
+    QString title = tr("查找结果 (共 %1 行, %2 处匹配)")
+                        .arg(m_totalMatchLines)
+                        .arg(m_totalMatchCount);
+    m_findResultDock->setWindowTitle(title);
+}

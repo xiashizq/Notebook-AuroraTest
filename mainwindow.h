@@ -4,6 +4,7 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QEvent>
+#include <QTreeWidget>
 #include "DiffFunction/DiffWidget.h"
 #include "folderDiff/CompareDialog.h"
 #include "jsvariablereplacer/jsvariablereplacer.h"
@@ -41,6 +42,10 @@ private slots:
     void onOpenFolderCompareTool();
 
     void showJSVariableReplacerWindow();
+
+    void setupFindResultPanel();
+
+    void updateFindResultTitle();
 
 
 protected:
@@ -102,5 +107,23 @@ private:
     QString unescapeString(const QString& s);
 
     JSVariableReplacer *jsVarReplacerWindow;
+
+    void setupToolBar();
+    void setupMenuBar();
+
+    //构建编辑菜单
+    void createEditMenu();
+
+    //构建查询列表
+    QDockWidget *m_findResultDock;        // 停靠窗口
+    QTreeWidget *m_findResultTree;        // 结果树（支持多列）
+    QLineEdit *m_findInput;               // 查找输入框
+    QPushButton *m_findButton;            // 查找按钮
+    QWidget *m_findWidget;                // 底部工具栏
+    void findInAllDocuments(const QString &text, bool findAll);
+    void onFindResultItemClicked(QTreeWidgetItem *item, int column);
+
+    int m_totalMatchLines;     // 匹配的行数（多少行包含匹配）
+    int m_totalMatchCount;     // 匹配的总次数（同一个行可能有多个匹配）
 
 };
